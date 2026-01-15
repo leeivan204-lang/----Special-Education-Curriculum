@@ -1,0 +1,3017 @@
+:root {
+    --primary-color: #4a90e2;
+    --secondary-color: #f5f6fa;
+    --border-color: #dcdde1;
+    --text-color: #2f3640;
+    --header-bg: #f8f9fa;
+    --hover-color: #e1e8ef;
+    --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --slot-height: 120px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Noto Sans TC', sans-serif;
+    color: var(--text-color);
+    background-color: #f0f2f5;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 250px;
+    background-color: white;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
+
+.sidebar-header {
+    padding: 1rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+
+.sidebar-header h1 {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+    margin-top: 0.25rem;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.2s;
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.nav-btn:hover {
+    background-color: var(--hover-color);
+}
+
+.nav-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.nav-btn .icon {
+    margin-right: 10px;
+}
+
+/* Main Content Styles */
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    background-color: #f0f2f5;
+}
+
+.view-container {
+    display: none;
+}
+
+.view-container.active {
+    display: block;
+}
+
+.view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-secondary {
+    background-color: white;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+/* Schedule Grid Styles */
+.schedule-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    border: 2px solid #000;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid #000;
+    padding: 0;
+    vertical-align: top;
+}
+
+.schedule-table th {
+    background-color: #f8f9fa;
+    padding: 10px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.col-period {
+    width: 120px;
+    background-color: #f8f9fa;
+}
+
+.period-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 10px;
+}
+
+.period-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.period-time {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.course-group-container {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    padding: 4px;
+    min-height: var(--slot-height);
+    height: 100%;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.course-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: white;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    min-height: 0;
+}
+
+.course-subject {
+    font-weight: bold;
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+}
+
+.course-teacher {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.course-group {
+    font-size: 0.8rem;
+    margin-top: 4px;
+    opacity: 0.8;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #95a5a6;
+    font-size: 1.1rem;
+}
+
+/* Course Management */
+.course-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.course-item-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+}
+
+.course-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.course-item-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.course-item-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.group-tag {
+    background-color: var(--secondary-color);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+/* Student Management */
+.student-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.student-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.student-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+}
+
+.student-grade {
+    background-color: var(--primary-color);
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.form-group.inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-group.inline label {
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+/* Group Preview */
+.group-preview {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.group-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.group-label {
+    background-color: var(--primary-color);
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+/* Grouping Workspace */
+.grouping-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.grouping-workspace {
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 250px);
+}
+
+.groups-columns-container {
+    flex: 2;
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+}
+
+.group-column {
+    min-width: 200px;
+    flex: 1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    flex-direction: column;
+}
+
+.group-column-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 8px 8px 0 0;
+}
+
+.group-drop-zone {
+    flex: 1;
+    padding: 0.5rem;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.group-drop-zone.drag-over {
+    background-color: #e3f2fd;
+}
+
+.student-pool-container {
+    flex: 1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.student-pool-container h3 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+.student-pool {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 2px dashed var(--border-color);
+    border-radius: 4px;
+    min-height: 200px;
+}
+
+.draggable-student {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.75rem;
+    cursor: move;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.draggable-student:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.draggable-student.dragging {
+    opacity: 0.5;
+}
+
+/* Empty state inside student pool */
+.student-pool .empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    color: #95a5a6;
+    font-size: 1rem;
+}
+
+/* �躰��剖�鞈�??蝛輯𨯙�躰部赯笔�頦肽𨯙�躰郭?�躰���?雿𡑒𨯙�躰��剖�????? */
+.all-groups-overview {
+    display: grid;
+    gap: 2rem;
+}
+
+.overview-course-section {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--card-shadow);
+}
+
+.overview-course-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--secondary-color);
+}
+
+.overview-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.overview-group-card {
+    background: #f5f6f8;
+    border-radius: 8px;
+    padding: 1.2rem;
+    border: 1px solid #e5e7eb;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+}
+
+.overview-group-name {
+    font-weight: bold;
+    margin-bottom: 1rem;
+    color: #1f2937;
+    font-size: 1rem;
+    text-align: center;
+    padding-bottom: 0.8rem;
+    border-bottom: none;
+}
+
+.overview-students-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex: 1;
+}
+
+.overview-student-item {
+    font-size: 0.9rem;
+    padding: 0.6rem 0.8rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    white-space: nowrap;
+}
+
+.overview-student-item .student-grade {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #4a90e2;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.overview-empty-group {
+    color: #9ca3af;
+    font-style: italic;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 2rem 0;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    overflow: auto;
+}
+
+.modal-content {
+    background-color: white;
+    margin: 2% auto;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.modal-close:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* Teacher Management */
+.teacher-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.teacher-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.teacher-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.teacher-icon {
+    background-color: var(--primary-color);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.btn-delete {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.btn-delete:hover {
+    opacity: 1;
+    background-color: #fee;
+}
+
+/* �躰��剖�鞈∵��躰��剖�頦肽𨯙????�躰��剖�鞈∵��躰��剖�頦肽𨯙?? */
+.course-blocks-pool {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+}
+
+.course-blocks-pool h3 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    font-size: 1.1rem;
+}
+
+.course-blocks-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    min-height: 80px;
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 1rem;
+    background: #f9f9f9;
+    border-radius: 6px;
+    border: 2px dashed var(--border-color);
+}
+
+.course-blocks-container.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.course-block {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 12px;
+    border-radius: 6px;
+    color: white;
+    cursor: move;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    user-select: none;
+}
+
+.course-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.course-block.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.course-block-header {
+    font-weight: bold;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+}
+
+.course-block-info {
+    font-size: 0.85rem;
+    opacity: 0.9;
+    margin-bottom: 2px;
+}
+
+.course-block-number {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    margin-top: 6px;
+    text-align: right;
+    font-style: italic;
+}
+
+/* �躰��剖�鞈∵狗?��𨯙�躰��剖�頦肽𨯙??????�躰��剖�鞈∵��躰��剖�頦肽𨯙??? */
+.course-group-container.drop-target {
+    background-color: #e3f2fd !important;
+    border: 2px dashed var(--primary-color) !important;
+}
+
+.course-group-container.occupied {
+    background-color: #fff;
+}
+
+/* �躰��剖�鞈∵狗?��𨯙�躰��剖�鞈�?�躰���??�躰��剖�鞈∵��躰��剖�頦肽𨯙????????????*/
+.course-card.draggable {
+    cursor: move;
+    user-select: none;
+}
+
+.course-card.draggable:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.course-card.dragging {
+    opacity: 0.5;
+}
+
+/* �躰��剖�鞈∵��躰��剖�鞈�?�躰���?雿𡑒𨯙�躰��剖�???? */
+.course-card .btn-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border: none;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.course-card:hover .btn-remove {
+    display: flex;
+}
+
+.course-card .btn-remove:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+
+/* ???P?????n?G?? */
+.schedule-with-pool {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.schedule-with-pool .schedule-container {
+    flex: 1;
+}
+
+.schedule-with-pool .course-blocks-pool {
+    width: 280px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    position: sticky;
+    top: 2rem;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+}
+
+.schedule-with-pool .course-blocks-pool h3 {
+    font-size: 1rem;
+    margin-bottom: 0.8rem;
+}
+
+.schedule-with-pool .course-blocks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    min-height: 200px;
+    max-height: none;
+    overflow-y: visible;
+}
+
+/* �躰��剖�鞈∵狗?��𨯙�躰��剖�鞈�?�躰���?雿𡑒𨯙�躰���?謖�𨯙�躰���?蝞𧶏��躰���?雿𡑒𨯙�躰���?�諹𨯙?�剛𨯙��?*/
+.schedule-title-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+}
+
+.schedule-title-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.2rem;
+    font-weight: 500;
+    flex-wrap: wrap;
+}
+
+.schedule-title-inputs input {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.schedule-title-inputs input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.schedule-title-inputs .title-input-text {
+    width: 150px;
+}
+
+/* �躰��剖�鞈�?����剖�鞈軋���?A4 �躰��剖�鞈∴��躰都??�𡏭𨯙�躰釭豰誩�頦肽𨯙�躰���?蝬質𨯙 */
+@page {
+    size: A4 portrait;
+    margin: 15mm;
+}
+
+/* ?�躰��剖�鞈�?�𡄯箲�剖����剖�?? - A4 ?�躰��剖�鞈∵��躰��剖�頦肽𨯙? */
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 1cm;
+    }
+
+    body {
+        background: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    .student-data-cell {
+        height: auto;
+        /* Allow flexible height in print to fill page */
+    }
+
+    .lunch-separator td {
+        border-top: 5px double #000 !important;
+    }
+}
+
+@media print {
+
+    /* Hide non-print elements */
+    .no-print,
+    .sidebar,
+    .nav-btn,
+    .btn-primary,
+    .btn-secondary,
+    .view-header,
+    .grouping-controls {
+        display: none !important;
+    }
+
+    body,
+    .app-container,
+    .main-content {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        background: white;
+    }
+
+    .view-container {
+        display: none;
+    }
+
+    .view-container.active {
+        display: block;
+    }
+
+    .generated-schedules-container {
+        display: block !important;
+    }
+
+    /* Print Visibility Toggles */
+    .student-schedule-screen {
+        display: none !important;
+    }
+
+    .student-schedule-print {
+        display: block !important;
+    }
+}
+
+/* Screen Visibility Toggles */
+.student-schedule-print {
+    display: none;
+}
+
+/* Print Styles */
+.student-schedule-print {
+    width: 100%;
+    margin-bottom: 2rem;
+    page-break-inside: avoid;
+    font-family: "KaiTi", "BiauKai", "DFKai-SB", "TW-Kai", serif;
+}
+
+/* 躰剖鞈?躰剖頦肽𨯙??躰剖??*/
+.schedule-title-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 0.5cm;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+}
+
+.schedule-title-inputs {
+    font-size: 16pt;
+    font-weight: bold;
+    gap: 0.2cm;
+}
+
+.schedule-title-inputs input {
+    border: none;
+    padding: 0;
+    font-weight: bold;
+    font-size: 16pt;
+    background: transparent;
+    text-align: center;
+}
+
+.schedule-title-inputs .title-input-text {
+    width: auto;
+    min-width: 100px;
+    border-bottom: 1px solid #000;
+}
+
+.schedule-title-inputs .title-input-number {
+    width: 50px;
+    border-bottom: 1px solid #000;
+}
+
+/* �躰���?撠滩𨯙?畾瑁𨯙�躰��剖�頦肽𨯙?? */
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid #000;
+    padding: 2px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.schedule-table th {
+    background-color: #f0f0f0 !important;
+    font-size: 12pt;
+    padding: 5px;
+}
+
+.col-period {
+    width: 80px;
+}
+
+.period-cell {
+    padding: 2px;
+}
+
+.period-name {
+    font-size: 11pt;
+    font-weight: bold;
+}
+
+.period-time {
+    font-size: 9pt;
+    color: #333;
+}
+
+/* �躰���?撠滩𨯙�躰��剖�頦肽𨯙??�躰��剖�鞈∵��躰��剖�頦肽𨯙? */
+.course-group-container {
+    min-height: 60px;
+    padding: 2px;
+}
+
+.course-card {
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    border: none;
+}
+
+.course-subject {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.course-teacher,
+.course-group {
+    font-size: 9pt;
+}
+
+.btn-remove {
+    display: none !important;
+}
+
+/* �躰���?�瘀��躰���?鞈�𨯙?�𡏭𨯙�躰��剖�頦肽𨯙??�躰��剖�鞈�?�躰部謘��頦肽𨯙�躰���?*/
+.master-schedule-table th {
+    background-color: #f0f0f0 !important;
+}
+
+.master-schedule-table th,
+.master-schedule-table td {
+    border: 1px solid #000;
+    padding: 0.4rem;
+}
+
+.master-group-block {
+    page-break-inside: avoid;
+}
+
+
+/* �躰���?�瘀��躰���?鞈�𨯙?�𡏭𨯙����剖�頦肽𨯙�躰���?*/
+.master-schedule-container {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    overflow-x: auto;
+}
+
+.master-schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.master-schedule-table th,
+.master-schedule-table td {
+    border: 1px solid #ddd;
+    padding: 0.8rem;
+    text-align: center;
+    vertical-align: top;
+}
+
+.master-schedule-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+}
+
+.master-schedule-table .col-period {
+    width: 120px;
+    background-color: #f0f2f5;
+}
+
+/* ?�躰��剖�鞈∵��躰��剖�頦肽𨯙??�躰��剖�鞈�?��?�躰��剖�?�躰��剖�?*/
+.master-group-block {
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin-bottom: 0.8rem;
+    text-align: left;
+}
+
+.master-group-block:last-child {
+    margin-bottom: 0;
+}
+
+.master-group-header {
+    font-weight: bold;
+    font-size: 1rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid #ddd;
+}
+
+.master-group-info {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.master-student-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.master-student-tag {
+    background-color: var(--secondary-color);
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    display: inline-flex;
+    align-items: center;
+}
+
+/* �躰��剖�鞈軋�����剖�???*/
+.master-schedule-table .empty-cell {
+    color: #999;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+
+/* 蝮質玨銵典��港�撅�璅�� */
+.master-group-info-vertical {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.master-info-row {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+}
+
+.master-student-list-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+}
+
+.master-student-item {
+    background-color: var(--secondary-color);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+/* Classroom Integrated Schedule Styles */
+.master-group-block.classroom-integrated {
+    background: #e8f4f8;
+    border: 1px solid #4a90a4;
+}
+
+.master-group-block.classroom-integrated .master-group-header {
+    color: #2c5f6f;
+    font-size: 1.05rem;
+}
+
+
+/* 蝮質玨銵典��唳見撘� */
+@media print {
+    #master-schedule-view .view-header {
+        display: none !important;
+    }
+
+    .master-schedule-container {
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    .master-group-block {
+        page-break-inside: avoid;
+        background: #f9f9f9 !important;
+        border: 1px solid #000 !important;
+    }
+
+    .master-group-header {
+        font-size: 10pt !important;
+    }
+
+    .master-info-row,
+    .master-student-item {
+        font-size: 9pt !important;
+    }
+}
+
+/* Individual Schedule Styles */
+.individual-schedule {
+    margin-bottom: 3rem;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+}
+
+.schedule-title {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+@media print {
+    .master-schedule-container {
+        padding: 0 !important;
+    }
+
+    .individual-schedule {
+        box-shadow: none !important;
+        margin: 0 0 10px 0 !important;
+        /* Minimal margin */
+        padding: 0 !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        page-break-inside: avoid !important;
+        /* Old standard */
+        break-inside: avoid !important;
+        /* New standard */
+        display: block !important;
+        /* Ensure block for break-inside to work */
+    }
+
+    /* Prevent tables from splitting */
+    .individual-schedule table,
+    .individual-schedule tbody,
+    .individual-schedule tr,
+    .individual-schedule td,
+    .individual-schedule th {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* Ensure container allows flow */
+    #generated-schedules-container {
+        display: block !important;
+    }
+
+    .individual-schedule:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+
+    .schedule-title {
+        color: black !important;
+    }
+
+    #schedule-type-select {
+        display: none !important;
+    }
+}
+
+/* 簡易課表列印樣式 */
+@media print {
+
+    /* 設定頁面為 A4 直向 */
+    @page {
+        size: A4 portrait;
+        margin: 1cm;
+    }
+
+    /* 只針對簡易課表視圖套用以下樣式 */
+    body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* 隱藏側邊欄和非列印元素 */
+    .sidebar,
+    .view-header,
+    .btn-primary,
+    .course-blocks-pool,
+    #schedule-view .schedule-title-inputs input,
+    #schedule-view .implementation-date-section input,
+    #schedule-view .implementation-date-section label,
+    #schedule-view .implementation-date-section span {
+        display: none !important;
+    }
+
+    /* 主容器調整 */
+    .app-container {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 0;
+        width: 100%;
+    }
+
+    /* 簡易課表標題區域 */
+    #schedule-view .schedule-title-section {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        page-break-inside: avoid;
+    }
+
+    #schedule-view .schedule-title-row-top {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+
+    #schedule-view .schedule-title-inputs {
+        display: block !important;
+        text-align: center;
+        font-size: 16pt;
+        font-weight: bold;
+        line-height: 1.8;
+    }
+
+    #schedule-view .schedule-title-inputs span {
+        display: inline !important;
+    }
+
+    /* 實施日期顯示 */
+    #schedule-view .schedule-title-row-bottom {
+        display: block !important;
+        text-align: right;
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    #schedule-view .implementation-date-section {
+        display: inline-block !important;
+        text-align: right;
+        font-size: 10pt;
+    }
+
+    /* 課表容器 */
+    #schedule-view .schedule-container {
+        width: 100%;
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* 課表表格 */
+    #schedule-view .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        margin-top: 1rem;
+    }
+
+    #schedule-view .schedule-table th,
+    #schedule-view .schedule-table td {
+        border: 1px solid #000 !important;
+        padding: 0.4rem;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 11pt;
+        background: white !important;
+    }
+
+    #schedule-view .schedule-table th {
+        background-color: #f0f0f0 !important;
+        font-weight: bold;
+    }
+
+    /* 節次欄位 */
+    #schedule-view .col-period {
+        width: 100px;
+    }
+
+    #schedule-view .period-cell {
+        padding: 0.3rem;
+    }
+
+    #schedule-view .period-name {
+        font-size: 11pt;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 0.2rem;
+    }
+
+    #schedule-view .period-time {
+        font-size: 9pt;
+        color: #333;
+        display: block;
+    }
+
+    /* 課程卡片 */
+    #schedule-view .course-card {
+        padding: 0.3rem;
+        border-radius: 0;
+        background: white !important;
+        color: black !important;
+        border: none;
+        box-shadow: none;
+        margin: 0.2rem 0;
+    }
+
+    #schedule-view .course-subject {
+        font-size: 11pt;
+        font-weight: bold;
+        margin-bottom: 0.2rem;
+        color: black !important;
+    }
+
+    #schedule-view .course-teacher,
+    #schedule-view .course-group {
+        font-size: 9pt;
+        color: #333 !important;
+    }
+
+    #schedule-view .btn-remove {
+        display: none !important;
+    }
+
+    /* 課程分組容器 */
+    #schedule-view .course-group-container {
+        min-height: auto;
+        padding: 0.2rem;
+    }
+
+    /* 確保不會跨頁分割 */
+    #schedule-view .schedule-table tr {
+        page-break-inside: avoid;
+    }
+}
+
+/* 強制覆蓋：切換列印專用表格顯示 */
+@media print {
+
+    #schedule-view .schedule-title-section,
+    #schedule-view .schedule-container,
+    #schedule-view .implementation-date-section {
+        display: none !important;
+    }
+
+    #print-schedule-wrapper {
+        display: block !important;
+    }
+
+    /* 確保表格格線在列印時可見 */
+    .print-schedule-table th,
+    .print-schedule-table td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        border: 1px solid #000 !important;
+    }
+}
+
+.part-time-mark {
+    background-color: #FED7AA !important;
+    border: 1px solid #d97706 !important;
+    color: #000 !important;
+    /* Ensure text is readable */
+}
+
+.part-time-mark .master-info-row {
+    color: #d97706 !important;
+    /* Keep the (?瞏貊綫) text color orange */
+}
+
+/* Force center alignment for all schedule blocks */
+.course-card {
+    text-align: center !important;
+    align-items: center !important;
+}
+
+.master-group-block {
+    text-align: center !important;
+}
+
+/* Ensure headers and info rows inside blocks are centered */
+.master-group-header {
+    text-align: center !important;
+    justify-content: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.master-info-row,
+.master-student-list-vertical,
+.master-student-item {
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+/* For flex items inside master blocks */
+.master-student-tags {
+    justify-content: center !important;
+}
+
+/* Print Logic Patch for Multi-Mode Printing */
+@media print {
+
+    /* 1. Hide all main UI elements */
+    #schedule-view,
+    #master-schedule-view,
+    #intro-view,
+    .navbar,
+    .modal,
+    #schedule-container,
+    .view-container,
+    .course-blocks-pool,
+    .schedule-controls,
+    .sidebar,
+    header,
+    nav {
+        display: none !important;
+    }
+
+    /* 2. Hide both print wrappers by default */
+    #print-schedule-wrapper,
+    #print-teacher-schedule-wrapper {
+        display: none !important;
+    }
+
+    /* 3. Show specific wrapper based on Body Class */
+    body.print-simple-mode #print-schedule-wrapper {
+        display: block !important;
+    }
+
+    body.print-teacher-mode #print-teacher-schedule-wrapper {
+        display: block !important;
+    }
+
+    /* Show Master View for General Print Mode */
+    body.print-general-mode #master-schedule-view {
+        display: block !important;
+    }
+
+    body.print-general-mode {
+        zoom: 0.6;
+    }
+
+    /* 2x2 Grid Layout for Day Cells */
+    /* Target the inner div, NOT the td */
+    body.print-general-mode .day-cell-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 2px !important;
+        align-content: start !important;
+        height: 100% !important;
+        width: 100% !important;
+    }
+
+    /* Ensure td holds the height */
+    body.print-general-mode .master-schedule-table td {
+        height: 1px;
+        /* Allow expansion */
+        padding: 2px !important;
+    }
+
+    /* Span 2 columns if single item */
+    body.print-general-mode .master-group-block.span-2 {
+        grid-column: span 2 !important;
+    }
+
+    /* Compact Master Schedule */
+    body.print-general-mode .master-schedule-table th,
+    body.print-general-mode .master-schedule-table td {
+        padding: 0.1rem !important;
+        font-size: 12pt !important;
+        border: 1px solid #ddd !important;
+    }
+
+    /* Remove padding for split layouts via class, force height expansion */
+    /* Remove padding for split layouts via class, force height expansion */
+    body.print-general-mode .master-schedule-table td.layout-2,
+    body.print-general-mode .master-schedule-table td.layout-3 {
+        padding: 0 !important;
+        height: 1px !important;
+        /* Critical: Allows child height:100% to work in table cell */
+        vertical-align: top !important;
+        position: relative !important;
+        /* Critical: Anchor for absolute child */
+    }
+
+    /* Teacher Stats Column */
+    body.print-general-mode .col-teacher-stats {
+        width: 15% !important;
+        font-size: 10pt !important;
+        vertical-align: top !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    /* Hide print table on web, show web table */
+    .master-schedule-table.print-only {
+        display: none !important;
+    }
+
+    .master-schedule-table.web-only {
+        display: table !important;
+    }
+
+    /* In print mode: hide web table, show print table */
+    body.print-general-mode .master-schedule-table.web-only {
+        display: none !important;
+    }
+
+    body.print-general-mode .master-schedule-table.print-only {
+        display: table !important;
+    }
+
+    /* Enable 2-column grid for print table with right-to-left, row-by-row flow */
+    body.print-general-mode .master-schedule-table.print-only .day-cell-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        grid-auto-flow: row dense !important;
+        direction: rtl !important;
+        gap: 2px !important;
+        align-content: start !important;
+        height: auto !important;
+        width: 100% !important;
+    }
+
+    body.print-general-mode .master-schedule-table.print-only .master-group-block {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 0 !important;
+        direction: ltr !important;
+    }
+
+    body.print-general-mode .master-schedule-table.print-only .master-group-block.span-2 {
+        grid-column: span 2 !important;
+    }
+
+    /* Prevent page breaks within a time slot row */
+    body.print-general-mode .master-schedule-table.print-only tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    body.print-general-mode .master-schedule-table.print-only td {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    body.print-general-mode .master-group-block {
+        padding: 0.2rem !important;
+        margin-bottom: 0 !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        border: 1px dashed #000 !important;
+        /* Update: Dashed border for internal blocks */
+    }
+
+    body.print-general-mode .master-group-header {
+        font-size: 12pt !important;
+        margin-bottom: 0.1rem !important;
+        white-space: normal !important;
+        /* Allow wrap */
+        line-height: 1.1 !important;
+        font-weight: bold !important;
+    }
+
+    body.print-general-mode .master-info-row {
+        font-size: 11pt !important;
+        margin-bottom: 0.1rem !important;
+    }
+
+    /* Vertical Student List (Reverted) */
+    body.print-general-mode .master-student-list-vertical {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1px !important;
+        justify-content: flex-start !important;
+        margin-top: 0.2rem !important;
+    }
+
+    body.print-general-mode .master-student-item {
+        padding: 0 !important;
+        font-size: 11pt !important;
+        display: block !important;
+        background: none !important;
+        text-align: center !important;
+        line-height: 1.1 !important;
+        font-weight: bold !important;
+    }
+
+    /* 4. Formatting for Teacher Print Pages */
+    body.print-teacher-mode .teacher-print-page {
+        page-break-after: always;
+        /* Force new page for each teacher */
+        width: 100%;
+        display: block;
+        background: white;
+        position: relative;
+    }
+
+    body.print-teacher-mode .teacher-print-page:last-child {
+        page-break-after: auto;
+    }
+
+    /* Print Table Styles */
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+    }
+
+    .print-table th,
+    .print-table td {
+        border: 1px solid #000 !important;
+    }
+
+    /* Stats Table */
+    .print-stats-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 5px;
+    }
+
+    .print-stats-table td {
+        border: 1px solid #000 !important;
+        padding: 5px;
+        text-align: center;
+    }
+
+    /* Print Header & Date Alignment */
+    .print-header {
+        text-align: center !important;
+        margin-bottom: 5px;
+        font-size: 18pt;
+        font-weight: bold;
+    }
+
+    .print-subheader {
+        text-align: left;
+        font-size: 12pt;
+        margin-bottom: 10px;
+    }
+
+    .print-date {
+        text-align: right !important;
+        margin-top: 10px;
+        font-size: 12pt;
+    }
+
+    /* Global Print Settings */
+    @page {
+        size: A4 portrait;
+        margin: 1cm;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}
+
+.manual-content {
+    color: #d35400;
+    font-weight: 500;
+}
+
+.clickable-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================ */
+/* Special Print Layout for Classroom Integrated Schedule */
+/* 3-Block Layout: Right (full height) + Left (split top/bottom) */
+/* ============================================ */
+
+/* Apply RTL Grid for Print Mode */
+.print-rtl-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row;
+    direction: rtl;
+    /* Fill from Right to Left */
+    gap: 0;
+    height: 100%;
+    width: 100%;
+}
+
+/* Reset direction for content readability */
+.print-rtl-grid>* {
+    direction: ltr;
+    box-sizing: border-box;
+}
+
+/* ========================================================================== */
+/* FIX: Force 3-Item Grid Layout for Print (Classroom Integrated Schedule)    */
+
+/* In print mode: hide web table, show print table */
+body.print-general-mode .master-schedule-table.web-only {
+    display: none !important;
+}
+
+body.print-general-mode .master-schedule-table.print-only {
+    display: table !important;
+}
+
+/* Enable 2-column grid for print table with right-to-left, row-by-row flow */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-auto-flow: row dense !important;
+    direction: rtl !important;
+    gap: 2px !important;
+    align-content: start !important;
+    height: auto !important;
+    width: 100% !important;
+}
+
+body.print-general-mode .master-schedule-table.print-only .master-group-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    margin-bottom: 0 !important;
+    direction: ltr !important;
+}
+
+body.print-general-mode .master-schedule-table.print-only .master-group-block.span-2 {
+    grid-column: span 2 !important;
+}
+
+/* Prevent page breaks within a time slot row */
+body.print-general-mode .master-schedule-table.print-only tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+body.print-general-mode .master-schedule-table.print-only td {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+body.print-general-mode .master-group-block {
+    padding: 0.2rem !important;
+    margin-bottom: 0 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+}
+
+body.print-general-mode .master-group-header {
+    font-size: 12pt !important;
+    margin-bottom: 0.1rem !important;
+    white-space: normal !important;
+    /* Allow wrap */
+    line-height: 1.1 !important;
+    font-weight: bold !important;
+}
+
+body.print-general-mode .master-info-row {
+    font-size: 11pt !important;
+    margin-bottom: 0.1rem !important;
+}
+
+/* Vertical Student List (Reverted) */
+body.print-general-mode .master-student-list-vertical {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
+    justify-content: flex-start !important;
+    margin-top: 0.2rem !important;
+}
+
+body.print-general-mode .master-student-item {
+    padding: 0 !important;
+    font-size: 11pt !important;
+    display: block !important;
+    background: none !important;
+    text-align: center !important;
+    line-height: 1.1 !important;
+    font-weight: bold !important;
+}
+
+/* 4. Formatting for Teacher Print Pages */
+body.print-teacher-mode .teacher-print-page {
+    page-break-after: always;
+    /* Force new page for each teacher */
+    width: 100%;
+    display: block;
+    background: white;
+    position: relative;
+}
+
+body.print-teacher-mode .teacher-print-page:last-child {
+    page-break-after: auto;
+}
+
+/* Print Table Styles */
+.print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.print-table th,
+.print-table td {
+    border: 1px solid #000 !important;
+}
+
+/* Stats Table */
+.print-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5px;
+}
+
+.print-stats-table td {
+    border: 1px solid #000 !important;
+    padding: 5px;
+    text-align: center;
+}
+
+/* Print Header & Date Alignment */
+.print-header {
+    text-align: center !important;
+    margin-bottom: 5px;
+    font-size: 18pt;
+    font-weight: bold;
+}
+
+.print-subheader {
+    text-align: left;
+    font-size: 12pt;
+    margin-bottom: 10px;
+}
+
+.print-date {
+    text-align: right !important;
+    margin-top: 10px;
+    font-size: 12pt;
+}
+
+/* Global Print Settings */
+@page {
+    size: A4 portrait;
+    margin: 1cm;
+}
+
+.no-print {
+    display: none !important;
+}
+
+/* End of print settings block */
+
+.manual-content {
+    color: #d35400;
+    font-weight: 500;
+}
+
+.clickable-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================ */
+/* Special Print Layout for Classroom Integrated Schedule */
+/* 3-Block Layout: Right (full height) + Left (split top/bottom) */
+/* ============================================ */
+
+/* Apply RTL Grid for Print Mode */
+.print-rtl-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row;
+    direction: rtl;
+    /* Fill from Right to Left */
+    gap: 0;
+    height: 100%;
+    width: 100%;
+}
+
+/* Reset direction for content readability */
+.print-rtl-grid>* {
+    direction: ltr;
+    box-sizing: border-box;
+}
+
+/* ========================================================================== */
+/* FIX: Force 3-Item Grid Layout for Print (Classroom Integrated Schedule)    */
+/* Rule: Group A (Item 1) -> Right (Span 2 Rows)                              */
+/*       Group B (Item 2) -> Top Left                                         */
+/*       Group C (Item 3) -> Bottom Left                                      */
+/* ========================================================================== */
+
+/* Use high specificity to override .master-schedule-table.print-only .day-cell-grid */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    grid-template-areas:
+        "groupB groupA"
+        "groupC groupA" !important;
+    height: 100%;
+    width: 100%;
+    /* FATAL: Force LTR so Left is B, Right is A */
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+    gap: 0;
+    border: none;
+}
+
+/* Force children to inherit LTR */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3>* {
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+}
+
+/* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
+    grid-area: groupA !important;
+    border-left: 1px dashed #666 !important;
+    border-bottom: none !important;
+    border-top: none !important;
+    border-right: none !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
+    grid-area: groupB !important;
+    border-bottom: 1px dashed #666 !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-top: none !important;
+}
+
+/* Item 3 (Group C): Assigned to 'groupC' area (Bottom Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(3) {
+    grid-area: groupC !important;
+    border: none !important;
+}
+
+/* Ensure height fill */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 .master-group-block {
+    /* border: none !important; REVERTED: Caused specific borders to vanish due to specificity/order */
+    height: 100%;
+}
+
+body.print-general-mode .master-info-row {
+    font-size: 11pt !important;
+    margin-bottom: 0.1rem !important;
+}
+
+/* Vertical Student List (Reverted) */
+body.print-general-mode .master-student-list-vertical {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
+    justify-content: flex-start !important;
+    margin-top: 0.2rem !important;
+}
+
+body.print-general-mode .master-student-item {
+    padding: 0 !important;
+    font-size: 11pt !important;
+    display: block !important;
+    background: none !important;
+    text-align: center !important;
+    line-height: 1.1 !important;
+    font-weight: bold !important;
+}
+
+/* 4. Formatting for Teacher Print Pages */
+body.print-teacher-mode .teacher-print-page {
+    page-break-after: always;
+    /* Force new page for each teacher */
+    width: 100%;
+    display: block;
+    background: white;
+    position: relative;
+}
+
+body.print-teacher-mode .teacher-print-page:last-child {
+    page-break-after: auto;
+}
+
+/* Print Table Styles */
+.print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.print-table th,
+.print-table td {
+    border: 1px solid #000 !important;
+}
+
+/* Stats Table */
+.print-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5px;
+}
+
+.print-stats-table td {
+    border: 1px solid #000 !important;
+    padding: 5px;
+    text-align: center;
+}
+
+/* Print Header & Date Alignment */
+.print-header {
+    text-align: center !important;
+    margin-bottom: 5px;
+    font-size: 18pt;
+    font-weight: bold;
+}
+
+.print-subheader {
+    text-align: left;
+    font-size: 12pt;
+    margin-bottom: 10px;
+}
+
+.print-date {
+    text-align: right !important;
+    margin-top: 10px;
+    font-size: 12pt;
+}
+
+/* Global Print Settings */
+@page {
+    size: A4 portrait;
+    margin: 1cm;
+}
+
+.no-print {
+    display: none !important;
+}
+
+/* End of print settings block */
+
+.manual-content {
+    color: #d35400;
+    font-weight: 500;
+}
+
+.clickable-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================ */
+/* Special Print Layout for Classroom Integrated Schedule */
+/* 3-Block Layout: Right (full height) + Left (split top/bottom) */
+/* ============================================ */
+
+/* Apply RTL Grid for Print Mode */
+.print-rtl-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row;
+    direction: rtl;
+    /* Fill from Right to Left */
+    gap: 0;
+    height: 100%;
+    width: 100%;
+}
+
+/* Reset direction for content readability */
+.print-rtl-grid>* {
+    direction: ltr;
+    box-sizing: border-box;
+}
+
+/* ========================================================================== */
+/* FIX: Force 3-Item Grid Layout for Print (Classroom Integrated Schedule)    */
+/* Rule: Group A (Item 1) -> Right (Span 2 Rows)                              */
+/*       Group B (Item 2) -> Top Left                                         */
+/*       Group C (Item 3) -> Bottom Left                                      */
+/* ========================================================================== */
+
+/* Use high specificity to override .master-schedule-table.print-only .day-cell-grid */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    grid-template-areas:
+        "groupB groupA"
+        "groupC groupA" !important;
+    height: 100%;
+    width: 100%;
+    /* FATAL: Force LTR so Left is B, Right is A */
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+    gap: 0;
+    border: none;
+}
+
+/* Force children to inherit LTR */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3>* {
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+}
+
+/* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
+    grid-area: groupA !important;
+    border-left: 1px dashed #666 !important;
+    border-bottom: none !important;
+    border-top: none !important;
+    border-right: none !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
+    grid-area: groupB !important;
+    border-bottom: 1px dashed #666 !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-top: none !important;
+}
+
+/* Item 3 (Group C): Assigned to 'groupC' area (Bottom Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(3) {
+    grid-area: groupC !important;
+    border: none !important;
+}
+
+/* Ensure height fill */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 .master-group-block {
+    /* border: none !important; REVERTED: Caused specific borders to vanish due to specificity/order */
+    height: 100%;
+}
+
+body.print-general-mode .master-info-row {
+    font-size: 11pt !important;
+    margin-bottom: 0.1rem !important;
+}
+
+/* Vertical Student List (Reverted) */
+body.print-general-mode .master-student-list-vertical {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
+    justify-content: flex-start !important;
+    margin-top: 0.2rem !important;
+}
+
+body.print-general-mode .master-student-item {
+    padding: 0 !important;
+    font-size: 11pt !important;
+    display: block !important;
+    background: none !important;
+    text-align: center !important;
+    line-height: 1.1 !important;
+    font-weight: bold !important;
+}
+
+/* 4. Formatting for Teacher Print Pages */
+body.print-teacher-mode .teacher-print-page {
+    page-break-after: always;
+    /* Force new page for each teacher */
+    width: 100%;
+    display: block;
+    background: white;
+    position: relative;
+}
+
+body.print-teacher-mode .teacher-print-page:last-child {
+    page-break-after: auto;
+}
+
+/* Print Table Styles */
+.print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.print-table th,
+.print-table td {
+    border: 1px solid #000 !important;
+}
+
+/* Stats Table */
+.print-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5px;
+}
+
+.print-stats-table td {
+    border: 1px solid #000 !important;
+    padding: 5px;
+    text-align: center;
+}
+
+/* Print Header & Date Alignment */
+.print-header {
+    text-align: center !important;
+    margin-bottom: 5px;
+    font-size: 18pt;
+    font-weight: bold;
+}
+
+.print-subheader {
+    text-align: left;
+    font-size: 12pt;
+    margin-bottom: 10px;
+}
+
+.print-date {
+    text-align: right !important;
+    margin-top: 10px;
+    font-size: 12pt;
+}
+
+/* Global Print Settings */
+@page {
+    size: A4 portrait;
+    margin: 1cm;
+}
+
+.no-print {
+    display: none !important;
+}
+
+/* End of print settings block */
+
+.manual-content {
+    color: #d35400;
+    font-weight: 500;
+}
+
+.clickable-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================ */
+/* Special Print Layout for Classroom Integrated Schedule */
+/* 3-Block Layout: Right (full height) + Left (split top/bottom) */
+/* ============================================ */
+
+/* Apply RTL Grid for Print Mode */
+.print-rtl-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row;
+    direction: rtl;
+    /* Fill from Right to Left */
+    gap: 0;
+    height: 100%;
+    width: 100%;
+}
+
+/* Reset direction for content readability */
+.print-rtl-grid>* {
+    direction: ltr;
+    box-sizing: border-box;
+}
+
+/* ========================================================================== */
+/* FIX: Force 3-Item Grid Layout for Print (Classroom Integrated Schedule)    */
+/* Rule: Group A (Item 1) -> Right (Span 2 Rows)                              */
+/*       Group B (Item 2) -> Top Left                                         */
+/*       Group C (Item 3) -> Bottom Left                                      */
+/* ========================================================================== */
+
+/* Use high specificity to override .master-schedule-table.print-only .day-cell-grid */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    grid-template-areas:
+        "groupB groupA"
+        "groupC groupA" !important;
+    height: 100%;
+    width: 100%;
+    /* FATAL: Force LTR so Left is B, Right is A */
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+    gap: 0;
+    border: none;
+}
+
+/* Force children to inherit LTR */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3>* {
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+}
+
+/* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
+    grid-area: groupA !important;
+    border-left: 1px dashed #666 !important;
+    border-bottom: none !important;
+    border-top: none !important;
+    border-right: none !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
+    grid-area: groupB !important;
+    border-bottom: 1px dashed #666 !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-top: none !important;
+}
+
+/* Item 3 (Group C): Assigned to 'groupC' area (Bottom Left) */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(3) {
+    grid-area: groupC !important;
+    border: none !important;
+}
+
+/* Ensure height fill */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3 .master-group-block {
+    /* border: none !important; REVERTED: Caused specific borders to vanish due to specificity/order */
+    height: 100%;
+}
+
+/* ========================================================================== */
+/* 2-Group Layout: Side-by-side with dashed vertical divider                 */
+/* ========================================================================== */
+
+/* Parent Grid: Force full height and stretch */
+/* Parent Grid: Force full height using Absolute Positioning to snap to cell edges */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2 {
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: auto !important;
+    /* Let top/bottom determine height */
+    width: auto !important;
+    gap: 0 !important;
+    /* Gap 0 for divider style */
+    border: none !important;
+    grid-template-rows: 1fr !important;
+    align-content: stretch !important;
+    align-items: stretch !important;
+    margin: 0 !important;
+}
+
+/* Force children to inherit LTR and be Flex Containers */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2>* {
+    direction: ltr !important;
+    unicode-bidi: bidi-override !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    /* Remove custom divider borders we added earlier */
+    border: none !important;
+    border-radius: 0 !important;
+    outline: none !important;
+}
+
+/* Item 1 (Left): Add Dashed Divider on Right */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2> :nth-child(1) {
+    border-right: 1px dashed #000 !important;
+}
+
+/* Item 2 (Right): No border */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2> :nth-child(2) {
+    border: none !important;
+}
+
+/* Inner Block: Remove border to rely on grid divider set above */
+body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2 .master-group-block {
+    height: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    /* Remove box border */
+
+}
+
+/* 
+   ========================================================================== 
+   Student Schedule Print vs Screen Toggles 
+   ========================================================================== 
+*/
+
+/* Default (Screen): Hide Print Version */
+.student-schedule-print {
+    display: none;
+}
+
+.student-schedule-screen {
+    display: block;
+}
+
+@media print {
+
+    /* Print: Hide Screen Version, Show Print Version */
+    .student-schedule-screen {
+        display: none !important;
+    }
+
+    .student-schedule-print {
+        display: block !important;
+        width: 100%;
+        margin-bottom: 2rem;
+        page-break-inside: avoid;
+        font-family: "KaiTi", "BiauKai", "DFKai-SB", "TW-Kai", serif;
+    }
+
+    /* Print Styling for Student Schedule */
+    .student-schedule-print .schedule-header-container {
+        text-align: center;
+        margin-bottom: 5px;
+    }
+
+    .student-schedule-print .schedule-main-title {
+        font-size: 36px;
+        /* Increased from 28px */
+        font-weight: bold;
+        margin: 0;
+        font-family: "KaiTi", "BiauKai", "DFKai-SB", "TW-Kai", serif;
+    }
+
+    .student-schedule-print .schedule-student-name {
+        font-size: 26px;
+        /* Increased from 20px */
+        text-align: left;
+        margin-left: 2px;
+        margin-top: 5px;
+        margin-bottom: 2px;
+        font-family: "KaiTi", "BiauKai", "DFKai-SB", "TW-Kai", serif;
+    }
+
+    .student-schedule-print .student-table {
+        border: 2px solid #000;
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .student-schedule-print .student-table th,
+    .student-schedule-print .student-table td {
+        border: 1px solid #000;
+        text-align: center;
+        vertical-align: middle;
+        padding: 4px;
+        /* Increased padding */
+    }
+
+    .student-schedule-print .col-day {
+        width: 16%;
+        font-size: 80px !important;
+        /* Super Maxed */
+        padding: 4px 0;
+        line-height: 1;
+    }
+
+    .student-schedule-print .col-time-header {
+        width: 10%;
+        font-size: 60px !important;
+        /* Super Maxed */
+        line-height: 1.2;
+    }
+
+    .student-schedule-print .col-period-header {
+        width: 5%;
+    }
+
+    .student-schedule-print .student-data-cell {
+        height: auto;
+        vertical-align: middle;
+    }
+
+    .student-schedule-print .student-cell-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .student-schedule-print .cell-subject {
+        font-size: 36px;
+        /* 26 -> 36 Important */
+        font-weight: bold;
+        line-height: 1.2;
+        margin-bottom: 4px;
+    }
+
+    .student-schedule-print .cell-teacher,
+    .student-schedule-print .cell-room {
+        font-size: 20px;
+        /* 14 -> 20 Important */
+        line-height: 1.2;
+        font-weight: normal;
+    }
+
+    .student-schedule-print .col-time-cell {
+        font-size: 24px;
+        /* 20 -> 24 */
+        font-weight: bold;
+    }
+
+    .student-schedule-print .time-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1.2;
+    }
+
+    .student-schedule-print .lunch-separator td {
+        border-top: 5px double #000 !important;
+    }
+
+    .student-schedule-print .vertical-text {
+        writing-mode: vertical-rl;
+        text-orientation: upright;
+        margin: 0 auto;
+        font-size: 26px;
+        /* 22 -> 26 */
+        font-weight: bold;
+        letter-spacing: 2px;
+    }
+
+    .edit-hint {
+        display: none !important;
+    }
+}
+
+/* Edit Hint Styles (Screen) */
+.edit-hint {
+    font-size: 0.8rem;
+    color: #999;
+    margin-top: 4px;
+    display: block;
+}
+
+/* Force Override for Print Headers */
+@media print {
+    body .student-schedule-print table.student-table thead tr th.col-day {
+        font-size: 32px !important;
+        /* 42 -> 32 Drastically Reduced */
+        line-height: 1 !important;
+        padding: 4px 0 !important;
+    }
+
+    body .student-schedule-print table.student-table thead tr th.col-time-header {
+        font-size: 26px !important;
+        /* 34 -> 26 Drastically Reduced */
+        line-height: 1 !important;
+        padding: 0 !important;
+    }
+}
+
+/* Override Edit Button */
+.btn-edit-override {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #666;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-left: 5px;
+    opacity: 0.5;
+    transition: all 0.2s;
+}
+
+.btn-edit-override:hover {
+    opacity: 1;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.btn-edit-override.active {
+    background-color: #ffd700;
+    color: #444;
+    opacity: 1;
+    border: 1px solid #e0c800;
+}
+
+/* Override Modal Styles */
+.student-selector-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-top: 1rem;
+    background: #fdfdfd;
+}
+
+.grade-section {
+    margin-bottom: 1.5rem;
+}
+
+.grade-section h4 {
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid #eee;
+    color: var(--primary-color);
+}
+
+.student-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.8rem;
+}
+
+.student-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.student-checkbox-item:hover {
+    background-color: #f5f6fa;
+}
+
+.student-checkbox-item.checked {
+    background-color: #e3f2fd;
+    border-color: #90caf9;
+}
+
+.student-grade-badge {
+    background: #999;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+}
+
+.student-checkbox-item.checked .student-grade-badge {
+    background: var(--primary-color);
+}
+
+.override-status {
+    padding: 0.8rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    color: #666;
+}
+
+.override-status.active {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+/* Hide edit button in print mode */
+@media print {
+    .btn-edit-override {
+        display: none !important;
+    }
+}
+
+/* ========================================= */
+/* Classroom Schedule Print Styles           */
+/* ========================================= */
+
+@media print {
+
+    /* Hide screen version, show print version */
+    .classroom-schedule-screen {
+        display: none !important;
+    }
+
+    .classroom-schedule-print {
+        display: block !important;
+        width: 100%;
+        page-break-after: always;
+        /* Match style */
+        font-family: "KaiTi", "DFKai-SB", "BiauKai", serif;
+        padding: 0;
+    }
+
+    .classroom-schedule-print:last-child {
+        page-break-after: auto;
+    }
+
+    /* Header */
+    .classroom-print-header {
+        position: relative;
+        text-align: center;
+        margin-bottom: 5px;
+        height: 90px;
+        /* Reserve space for larger gap */
+    }
+
+    .classroom-title {
+        font-size: 28pt;
+        /* Large but not huge */
+        font-weight: bold;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .classroom-date-generated {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        font-size: 12pt;
+    }
+
+    /* Table */
+    .classroom-print-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        border: 3px solid #000;
+        /* Thick outer border */
+    }
+
+    .classroom-print-table th,
+    .classroom-print-table td {
+        border: 1px solid #000;
+        text-align: center;
+        vertical-align: middle;
+        padding: 2px;
+    }
+
+    /* Header Row */
+    .classroom-print-table th {
+        height: 60px;
+        font-size: 20pt;
+        font-weight: bold;
+    }
+
+    /* Cells */
+    .classroom-print-table td {
+        height: 132px;
+        /* Calculated for A4 fit (35mm) */
+    }
+
+    .classroom-cell-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        font-weight: bold;
+    }
+
+    .cell-subject {
+        font-size: 24pt;
+        /* Readable large */
+        margin-bottom: 2px;
+        line-height: 1.2;
+    }
+
+    .cell-teacher {
+        font-size: 18pt;
+        line-height: 1.2;
+    }
+
+    .cell-room {
+        font-size: 16pt;
+        margin-top: 2px;
+    }
+
+    /* Time Column (Last) */
+    .col-time-print {
+        width: 12%;
+    }
+
+    .col-time-print-cell {
+        font-weight: bold;
+        line-height: 1.2;
+    }
+
+    .period-num {
+        font-size: 18pt;
+        margin-bottom: 5px;
+    }
+
+    .period-time {
+        font-size: 14pt;
+    }
+
+    .period-time-sep {
+        font-size: 14pt;
+        margin: 0;
+    }
+}
+
+/* Screen visibility default */
+.classroom-schedule-print {
+    display: none;
+}
