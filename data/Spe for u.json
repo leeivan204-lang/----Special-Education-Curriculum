@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-01-15T19:27:37.736Z",
+  "timestamp": "2026-01-16T03:37:50.740Z",
   "courses": [
     {
       "groupDetails": {
@@ -92,22 +92,22 @@
     {
       "groupDetails": {
         "七九年級": {
+          "displayRoom": "132教室",
           "hours": "3",
           "room": "綜合球場",
           "teacher": [
             "楊巧玲",
             "戴冠渶"
-          ],
-          "displayRoom": "132教室"
+          ]
         },
         "八年級": {
+          "displayRoom": "132教室",
           "hours": "3",
           "room": "綜合球場",
           "teacher": [
             "余易倩",
             "萬曉芬"
-          ],
-          "displayRoom": "132教室"
+          ]
         }
       },
       "groups": [
