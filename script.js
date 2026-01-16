@@ -772,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let existingTeacher1 = '';
             let existingTeacher2 = '';
             let existingGroupName = groupName; // Default to generated name
-
+            let existingDisplayRoom = '';
             // Standard room options
             const standardRooms = ['待訂', '132教室', '133教室', '136教室', '137教室', '綜合球場'];
             let isCustomRoom = false;
@@ -783,6 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 existingGroupName = oldGroupName; // Use the saved group name
                 if (courseToEdit.groupDetails && courseToEdit.groupDetails[oldGroupName]) {
                     existingRoom = courseToEdit.groupDetails[oldGroupName].room || '待訂';
+                    existingDisplayRoom = courseToEdit.groupDetails[oldGroupName].displayRoom || '';
                     const teacherData = courseToEdit.groupDetails[oldGroupName].teacher;
                     // Handle both old format (string) and new format (array)
                     if (Array.isArray(teacherData)) {
@@ -846,6 +847,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label>自訂教室名稱</label>
                             <input type="text" class="form-control custom-room-input" placeholder="請輸入教室名稱" value="${customRoomValue}">
                         </div>
+
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>教室課表顯示教室 (選填)</label>
+                            <div style="font-size: 0.8rem; color: #666; margin-bottom: 5px;">若填寫此欄位，在「教室課表 (個別)」中，此課程將顯示於指定教室，而非上方設定的原始教室。其他課表不受影響。</div>
+                            <input type="text" class="form-control display-room-input" placeholder="請輸入教室名稱 (例如：七年級教室)" value="${existingDisplayRoom}">
+                        </div>
                     </div>
                 </div>
             `;
@@ -904,10 +911,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 roomValue = customRoomInput.value.trim() || '待訂';
             }
 
+            const displayRoomInput = item.querySelector('.display-room-input');
+            const displayRoomValue = displayRoomInput ? displayRoomInput.value.trim() : '';
+
             groupDetails[name] = {
                 hours: courseHours,
                 room: roomValue,
-                teacher: teachers.length > 0 ? teachers : []
+                teacher: teachers.length > 0 ? teachers : [],
+                displayRoom: displayRoomValue
             };
         });
 
@@ -2880,6 +2891,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (c.groupDetails) {
                 Object.values(c.groupDetails).forEach(d => {
                     if (d.room) rooms.add(d.room);
+                    if (d.displayRoom) rooms.add(d.displayRoom);
                 });
             }
         });
@@ -2918,7 +2930,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     course.groups.forEach(groupName => {
                         const details = course.groupDetails[groupName];
-                        if (details && details.room === room) {
+                        // Use displayRoom if set, otherwise original room
+                        const effectiveRoom = details.displayRoom || details.room;
+
+                        if (details && effectiveRoom === room) {
                             const teacherDisplay = Array.isArray(details.teacher) ? details.teacher.join(', ') : (details.teacher || '未排');
 
                             roomBlocks.push(`
@@ -2991,7 +3006,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             course.groups.forEach(groupName => {
                                 const details = course.groupDetails[groupName];
-                                if (details && details.room === room) {
+                                // Use displayRoom if set, otherwise original room
+                                const effectiveRoom = details.displayRoom || details.room;
+
+                                if (details && effectiveRoom === room) {
                                     // Found class in this room
                                     const teacherDisplay = Array.isArray(details.teacher)
                                         ? details.teacher.join('、')
