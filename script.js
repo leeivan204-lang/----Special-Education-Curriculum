@@ -181,12 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const serverTime = parseTimestamp(serverResult.data.timestamp);
                 const cloudTime = parseTimestamp(normalizedCloudData.timestamp);
 
-                console.log('Comparing timestamps:', {
-                    serverStr: serverResult.data.timestamp,
-                    serverParsed: serverTime,
-                    cloudStr: normalizedCloudData.timestamp,
-                    cloudParsed: cloudTime
-                });
+                // console.log('Comparing timestamps:', { serverTime, cloudTime });
 
                 if (cloudTime > serverTime) {
                     // Cloud is newer
