@@ -19,7 +19,83 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Login & State ---
     let CURRENT_USER = null;
+    let LAST_SYNCED_TIMESTAMP = null; // Track the base version for optimistic locking
     const API_BASE = 'http://localhost:3000/api';
+
+    // Initialize Socket.IO
+    const socket = io('http://localhost:3000');
+
+    socket.on('connect', () => {
+        console.log('Connected to WebSocket server');
+    });
+
+    socket.on('data_updated', (data) => {
+        console.log('Received data_updated event:', data);
+
+        // Check if the timestamp is newer than what we have
+        // But more importantly, if we are not the one who saved it.
+        // Simplified check: If the timestamp is different from our LAST_SYNCED_TIMESTAMP, it's new.
+        // Wait, if WE saved it, LAST_SYNCED_TIMESTAMP is already updated in saveAllDataToServer.
+        // So if data.timestamp > LAST_SYNCED_TIMESTAMP, it's from someone else.
+
+        if (data.timestamp && data.timestamp !== LAST_SYNCED_TIMESTAMP) {
+            showUpdateToast();
+        }
+    });
+
+    function showUpdateToast() {
+        // Create or reuse toast element
+        let toast = document.getElementById('update-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'update-toast';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '20px';
+            toast.style.right = '20px';
+            toast.style.backgroundColor = '#333';
+            toast.style.color = '#fff';
+            toast.style.padding = '15px 25px';
+            toast.style.borderRadius = '5px';
+            toast.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+            toast.style.zIndex = '9999';
+            toast.style.display = 'flex';
+            toast.style.alignItems = 'center';
+            toast.style.gap = '15px';
+            toast.style.transition = 'transform 0.3s ease-in-out';
+
+            const msg = document.createElement('span');
+            msg.textContent = '資料已更新，請載入最新版本。';
+
+            const btn = document.createElement('button');
+            btn.textContent = '立即載入';
+            btn.style.backgroundColor = '#4CAF50';
+            btn.style.border = 'none';
+            btn.style.color = 'white';
+            btn.style.padding = '5px 10px';
+            btn.style.borderRadius = '3px';
+            btn.style.cursor = 'pointer';
+
+            btn.onclick = async () => {
+                await loadDataAndSync(); // This will pull new data and update LAST_SYNCED_TIMESTAMP
+                toast.style.transform = 'translateY(150%)'; // Hide
+            };
+
+            const close = document.createElement('span');
+            close.innerHTML = '&times;';
+            close.style.cursor = 'pointer';
+            close.style.marginLeft = '10px';
+            close.onclick = () => {
+                toast.style.transform = 'translateY(150%)'; // Hide
+            };
+
+            toast.appendChild(msg);
+            toast.appendChild(btn);
+            toast.appendChild(close);
+            document.body.appendChild(toast);
+        }
+
+        toast.style.transform = 'translateY(0)'; // Show
+    }
 
     // UI Elements for Login
     const loginSection = document.getElementById('login-section');
@@ -95,6 +171,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             CURRENT_USER = userId;
+
+            // Join WebSocket Room
+            socket.emit('join', { userId: userId });
 
             // 2. Load Data
             await loadDataAndSync();
@@ -247,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else {
                             console.log('User chose Remote. Overwriting local...');
                             importDataToMemory(bestRemoteData);
+                            LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
                             return;
                         }
                     }
@@ -255,6 +335,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Normal case: Remote is newer or local is empty/old -> Trust Remote
                 console.log('Loading remote data...');
                 importDataToMemory(bestRemoteData);
+                // Update our "base" timestamp to match what we just loaded
+                LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
             } else {
                 // --- C. No Remote Data (New User) ---
                 console.log('No server or cloud data found.');
@@ -330,12 +412,52 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!CURRENT_USER) return;
         const data = getFullDataSnapshot();
         try {
-            await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
+            // New optimistic locking payload
+            const payload = {
+                data: data,
+                lastSyncedTimestamp: LAST_SYNCED_TIMESTAMP
+            };
+
+            const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                body: JSON.stringify(payload)
             });
+
+            if (response.status === 409) {
+                // Conflict detected!
+                const serverRes = await response.json();
+                console.warn('Conflict detected:', serverRes.message);
+
+                const userChoice = confirm(
+                    `【資料衝突警告】\n\n` +
+                    `系統偵測到您正在編輯的資料版本過舊，伺服器上已有較新的修改。\n` +
+                    `為避免資料遺失，請選擇「重新載入」以取得最新資料。\n\n` +
+                    `注意：您目前尚未儲存的修改將會遺失！\n\n` +
+                    `[確定] 重新載入 (Reload)\n` +
+                    `[取消] 取消 (Cancel) - 暫時停留在當前畫面`
+                );
+
+                if (userChoice) {
+                    // Reload
+                    console.log('User chose to reload after conflict.');
+                    await loadDataAndSync(); // This will refresh data from server
+                } else {
+                    // Cancel
+                    console.log('User cancelled conflict resolution. Local state preserved but unsaved.');
+                }
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status} ${response.statusText}`);
+            }
+
             console.log('Data saved to server successfully.');
+
+            // On success, update our local base timestamp to the one we just saved
+            LAST_SYNCED_TIMESTAMP = data.timestamp;
+
         } catch (err) {
             console.error('Failed to save to server:', err);
         }
@@ -687,47 +809,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // New: Cloud Backup (Google Sheets)
     const btnCloudBackup = document.getElementById('btn-cloud-backup');
+    const btnLogout = document.getElementById('btn-logout');
     // UI elements for GAS URL have been removed
 
 
-    if (btnCloudBackup) {
-        btnCloudBackup.addEventListener('click', async () => {
-            if (!GAS_API_URL) {
-                alert('系統未設定 Google Apps Script 網址，請聯繫管理員！');
-                return;
-            }
+    // Extracted backup function
+    async function backupToCloud(skipConfirm = false) {
+        if (!GAS_API_URL) {
+            alert('系統未設定 Google Apps Script 網址，請聯繫管理員！');
+            return false;
+        }
 
-            if (!confirm('確定要將目前資料備份到 Google Sheet 嗎？')) return;
+        if (!skipConfirm && !confirm('確定要將目前資料備份到 Google Sheet 嗎？')) return false;
 
+        if (btnCloudBackup) {
             btnCloudBackup.disabled = true;
             btnCloudBackup.textContent = '備份中...';
+        }
 
-            try {
-                const data = getFullDataSnapshot();
-                data.userId = CURRENT_USER; // Use consistent key 'userId'
+        try {
+            const data = getFullDataSnapshot();
+            data.userId = CURRENT_USER;
 
-                // Using standard POST. Script should handle doGet/doPost.
-                // Assuming the script returns JSON response. 
-                // Using no-cors might prevent reading response, trying standard first.
-                // If CORS issue, user might need to deploy GAS as "Anyone".
+            // Using standard POST. Script should handle doGet/doPost.
+            // Assuming the script returns JSON response. 
+            // Using no-cors might prevent reading response, trying standard first.
+            // If CORS issue, user might need to deploy GAS as "Anyone".
 
-                await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS often likes text/plain to avoid preflight
-                    body: JSON.stringify(data)
-                });
+            await fetch(GAS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS often likes text/plain to avoid preflight
+                body: JSON.stringify(data)
+            });
 
-                alert('備份請求已發送至 Google Cloud！');
+            if (!skipConfirm) alert('備份請求已發送至 Google Cloud！');
+            return true;
 
-            } catch (err) {
-                console.error(err);
-                alert('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
-            } finally {
+        } catch (err) {
+            console.error(err);
+            alert('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
+            return false;
+        } finally {
+            if (btnCloudBackup) {
                 btnCloudBackup.disabled = false;
                 btnCloudBackup.textContent = '備份至 Google Cloud'; // Reset text
                 btnCloudBackup.innerHTML = '<span class="icon">☁️</span><span>備份至 Google Cloud</span>';
             }
-        });
+        }
+    }
+
+    if (btnCloudBackup) {
+        btnCloudBackup.addEventListener('click', () => backupToCloud(false));
+    }
+
+    if (btnLogout) {
+        btnLogout.addEventListener('click', handleLogout);
+    }
+
+    async function handleLogout() {
+        // 詢問用戶是否備份
+        if (confirm('登出前是否要備份資料至 Google Cloud？\n(建議點選「確定」以確保資料安全)')) {
+            const success = await backupToCloud(true); // true = skip duplicate confirm
+            if (success) {
+                alert('備份成功，即將登出...');
+                location.reload();
+            } else {
+                // 備份失敗
+                if (confirm('備份失敗，仍要強制登出嗎？')) {
+                    location.reload();
+                }
+            }
+        } else {
+            // 用戶選擇不備份，直接登出
+            location.reload();
+        }
     }
 
     // 2. Portable Export (data.js Download)

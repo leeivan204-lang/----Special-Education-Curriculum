@@ -87,6 +87,14 @@
                     <span>備份至 Google Cloud</span>
                 </button>
 
+                <div class="nav-divider" style="height: 1px; background: rgba(255,255,255,0.2); margin: 0.5rem 1rem;">
+                </div>
+
+                <button id="btn-logout" class="nav-btn" style="color: #cbd5e1; border: 1px solid #475569;">
+                    <span class="icon">🚪</span>
+                    <span>登出 (Logout)</span>
+                </button>
+
                 <input type="file" id="file-restore-data" accept=".json" style="display: none;">
                 <div style="margin-top: auto; padding-top: 1rem; font-size: 0.8rem; color: #999; text-align: center;">
                     系統版本: 2025.12.11
@@ -602,6 +610,8 @@
     </div>
 
     <!-- Portable Data Script (Optional, for folder copy transfer) -->
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script src="data.js" onerror="this.remove()"></script>
     <script src="script.js?v=20260118_2320"></script>
 </body>
