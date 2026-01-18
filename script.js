@@ -178,8 +178,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (serverHasData && normalizedCloudData) {
                 // Both exist, compare timestamps
-                const serverTime = new Date(serverResult.data.timestamp || 0).getTime();
-                const cloudTime = new Date(normalizedCloudData.timestamp || 0).getTime();
+                const serverTime = parseTimestamp(serverResult.data.timestamp);
+                const cloudTime = parseTimestamp(normalizedCloudData.timestamp);
+
+                console.log('Comparing timestamps:', {
+                    serverStr: serverResult.data.timestamp,
+                    serverParsed: serverTime,
+                    cloudStr: normalizedCloudData.timestamp,
+                    cloudParsed: cloudTime
+                });
 
                 if (cloudTime > serverTime) {
                     // Cloud is newer
@@ -224,8 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // If we have valid local data
                 if (courses.length > 0) {
-                    const remoteTime = new Date(bestRemoteData.timestamp || 0).getTime();
-                    const localTime = new Date(localTimestamp || 0).getTime();
+                    const remoteTime = parseTimestamp(bestRemoteData.timestamp);
+                    const localTime = parseTimestamp(localTimestamp);
 
                     if (localTime > remoteTime) {
                         // Local is newer! Conflict!
@@ -253,7 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Normal case: Remote is newer or local is empty/old -> Trust Remote
                 console.log('Loading remote data...');
                 importDataToMemory(bestRemoteData);
-
             } else {
                 // --- C. No Remote Data (New User) ---
                 console.log('No server or cloud data found.');
@@ -287,6 +293,31 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('Critical error during loadDataAndSync:', err);
             // Fallback: Just let the user continue with whatever is in local memory
             // alert('資料同步發生錯誤，將使用離線模式。');
+        }
+
+        // Helper: Robust Timestamp Parser
+        function parseTimestamp(ts) {
+            if (!ts) return 0;
+            try {
+                let date = new Date(ts);
+                if (!isNaN(date.getTime())) return date.getTime();
+                let cleanTs = ts.replace(/上午|下午|AM|PM/g, ' ').trim();
+                const parts = cleanTs.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/);
+                if (parts) {
+                    let [_, y, m, d, h, min, s] = parts;
+                    h = parseInt(h);
+                    if (ts.includes('下午') || ts.includes('PM')) {
+                        if (h < 12) h += 12;
+                    } else if (ts.includes('上午') || ts.includes('AM')) {
+                        if (h === 12) h = 0;
+                    }
+                    return new Date(y, m - 1, d, h, min, s).getTime();
+                }
+                return 0;
+            } catch (e) {
+                console.warn('Date parsing failed for:', ts, e);
+                return 0;
+            }
         }
     }
 
