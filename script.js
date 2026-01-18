@@ -109,7 +109,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error(err);
-            showLoginError(err.message || '無法連接伺服器，請確認 server.js 已啟動');
+            // If connection fails, assume offline mode (GitHub Pages or local without server)
+            console.warn('Connection failed, switching to Offline Mode');
+
+            // Proceed as logged in (Offline)
+            CURRENT_USER = userId;
+
+            // Load local data only
+            // We can just call loadDataAndSync(), its catch block will handle fetch failure 
+            // but we need it to NOT throw so we can proceed.
+            // Actually, loadDataAndSync already catches errors and falls back to local.
+            await loadDataAndSync();
+
+            // Enter App
+            loginSection.classList.add('hidden');
+            loginSection.style.display = 'none';
+            mainAppSection.style.display = 'flex';
+
+            // Force Re-render
+            refreshAllViews();
+
+            // Notify user
+            // Optional: alert('以此 ID 進入離線模式 (Offline Mode)');
         } finally {
             loginBtn.disabled = false;
             loginBtn.textContent = '登入';
@@ -142,9 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (err) {
-            console.warn('Data sync failed:', err);
+            console.warn('Data sync failed (Offline Mode active):', err);
             // Fallback to local data (already loaded in variables below)
-            alert('警告：無法同步伺服器資料，將使用本機暫存資料。請檢查連線。');
+            // alert('警告：無法同步伺服器資料，將使用本機暫存資料。請檢查連線。'); 
         }
     }
 
