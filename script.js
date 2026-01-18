@@ -65,9 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'presence-toast';
-            toast.style.position = 'fixed';
-            toast.style.top = '0';
-            toast.style.left = '0';
+            toast.style.position = 'relative'; // Changed from fixed to relative to push content down
             toast.style.width = '100%';
             toast.style.backgroundColor = '#ff9800'; // Orange warning
             toast.style.color = '#fff';
@@ -98,7 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             toast.appendChild(msg);
             toast.appendChild(close);
-            document.body.appendChild(toast);
+
+            // Insert at the very top of body
+            document.body.insertBefore(toast, document.body.firstChild);
         }
 
         toast.querySelector('#presence-toast-msg').textContent = message;
