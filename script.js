@@ -213,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let studentManualEntries = JSON.parse(localStorage.getItem('studentManualEntries')) || {}; // { studentId: { 'monday-1': 'text', ... } }
     let slotOverrides = JSON.parse(localStorage.getItem('slotOverrides')) || {}; // { slotKey: { courseId: { groupName: [studentId, ...] } } }
+    let gasWebAppUrl = localStorage.getItem('gasWebAppUrl') || ''; // Store GAS Web App URL
 
     // Sanitize schedule data to remove invalid entries
     sanitizeScheduleData();
@@ -506,6 +507,77 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // New: Cloud Backup (Google Sheets)
+    const btnCloudBackup = document.getElementById('btn-cloud-backup');
+    const inputGasUrl = document.getElementById('input-gas-url');
+    const btnSaveGasUrl = document.getElementById('btn-save-gas-url');
+    const gasStatus = document.getElementById('gas-status');
+
+    // Restore URL from local storage
+    if (inputGasUrl) {
+        inputGasUrl.value = gasWebAppUrl;
+        if (gasWebAppUrl && gasStatus) {
+            gasStatus.textContent = '已設定連結';
+        }
+    }
+
+    if (btnSaveGasUrl && inputGasUrl) {
+        btnSaveGasUrl.addEventListener('click', () => {
+            const url = inputGasUrl.value.trim();
+            if (url) {
+                gasWebAppUrl = url;
+                localStorage.setItem('gasWebAppUrl', gasWebAppUrl);
+                alert('Google Sheet URL 已儲存！');
+                if (gasStatus) gasStatus.textContent = '已設定連結';
+            } else {
+                alert('請輸入有效的 URL');
+            }
+        });
+    }
+
+    if (btnCloudBackup) {
+        btnCloudBackup.addEventListener('click', async () => {
+            if (!gasWebAppUrl) {
+                alert('請先設定 Google Apps Script 網址！');
+                return;
+            }
+
+            if (!confirm('確定要將目前資料備份到 Google Sheet 嗎？')) return;
+
+            btnCloudBackup.disabled = true;
+            btnCloudBackup.textContent = '備份中...';
+
+            try {
+                const data = getFullDataSnapshot();
+                // Add user ID for identification in the sheet
+                data.id = CURRENT_USER;
+
+                // Use no-cors mode since we just want to send data and GAS return text/plain or json might be blocked by CORS policies strictly in some browsers 
+                // However, 'no-cors' treats response as opaque so we can't check success/fail easily from response body.
+                // Best practice for GAS Web App is to return JSONP or handle CORS text output correctly.
+                // Since this is a simple "fire and forget" or we hope for the best in this environment:
+
+                await fetch(gasWebAppUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                alert('備份請求已發送！\n（因跨網域限制，無法確認 Google Sheet 是否寫入成功，請直接查看試算表）');
+            } catch (err) {
+                console.error(err);
+                alert('備份發送失敗：' + err.message);
+            } finally {
+                btnCloudBackup.disabled = false;
+                btnCloudBackup.textContent = '備份至 Google Sheet'; // Reset text
+                btnCloudBackup.innerHTML = '<span class="icon">☁️</span><span>備份至 Google Cloud</span>';
+            }
+        });
+    }
+
     // 2. Portable Export (data.js Download)
     if (btnExportPortable) {
         btnExportPortable.addEventListener('click', () => {
@@ -636,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.studentManualEntries) localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries));
         if (data.slotOverrides) localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides));
         if (data.scheduleTitle) localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle));
+        // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
 
         localStorage.setItem('lastSavedTimestamp', data.timestamp || new Date().toISOString());
 
