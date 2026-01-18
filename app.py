@@ -39,6 +39,10 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
+# Presence Tracking
+socket_to_user = {} # sid -> user_id
+user_sockets = {} # user_id -> set(sids)
+
 @app.route('/')
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
@@ -51,10 +55,44 @@ def serve_static(path):
 @socketio.on('join')
 def on_join(data):
     user_id = data.get('userId')
+    sid = request.sid
+    
     if user_id:
         join_room(user_id)
-        print(f"Client joined room: {user_id}")
+        
+        # Update mappings
+        socket_to_user[sid] = user_id
+        if user_id not in user_sockets:
+            user_sockets[user_id] = set()
+        user_sockets[user_id].add(sid)
+        
+        count = len(user_sockets[user_id])
+        print(f"Client {sid} joined room {user_id}. Total count: {count}")
+        
         emit('status', {'msg': f'Joined room {user_id}'}, room=user_id)
+        
+        # If multiple users are present, warn everyone
+        if count > 1:
+            emit('presence_warning', {
+                'message': '目前已有其他用戶修改內容，避免資料無法同步，請稍等',
+                'count': count
+            }, room=user_id)
+
+@socketio.on('disconnect')
+def on_disconnect():
+    sid = request.sid
+    user_id = socket_to_user.get(sid)
+    
+    if user_id:
+        if user_id in user_sockets:
+            user_sockets[user_id].discard(sid)
+            if len(user_sockets[user_id]) == 0:
+                del user_sockets[user_id]
+        
+        if sid in socket_to_user:
+            del socket_to_user[sid]
+            
+        print(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
 
 # API: Login
 @app.route('/api/login', methods=['POST'])

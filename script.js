@@ -34,24 +34,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('data_updated', (data) => {
-        console.log('Received data_updated event:', data);
+        // Disabled per user request (2026-01-19):
+        // "無需同步內容" - No need to sync content, just warn about presence.
+        console.log('Received data_updated event (Ignored per configuration):', data);
 
+        /* 
         // Robust Self-Notification Check via Socket ID
         if (socket.id && data.sourceSocketId && socket.id === data.sourceSocketId) {
-            console.log('Ignoring self-generated update event (ID match)');
-            return;
+             return;
         }
-
-        // Secondary check (legacy/backup)
-        if (PENDING_SAVE_TIMESTAMP && data.timestamp === PENDING_SAVE_TIMESTAMP) {
-            console.log('Ignoring self-generated update event (Time match)');
-            return;
-        }
-
-        // Check if the timestamp is newer than what we have
         if (data.timestamp && data.timestamp !== LAST_SYNCED_TIMESTAMP) {
             showUpdateToast();
         }
+        */
+    });
+
+    socket.on('presence_warning', (data) => {
+        console.log('Presence warning:', data);
+        showPresenceToast(data.message);
     });
 
     function showUpdateToast() {
@@ -106,6 +106,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         toast.style.transform = 'translateY(0)'; // Show
+    }
+
+    function showPresenceToast(message) {
+        let toast = document.getElementById('presence-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'presence-toast';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '80px'; // Higher than update toast
+            toast.style.right = '20px';
+            toast.style.backgroundColor = '#ff9800'; // Orange warning
+            toast.style.color = '#fff';
+            toast.style.padding = '15px 25px';
+            toast.style.borderRadius = '5px';
+            toast.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+            toast.style.zIndex = '10000';
+            toast.style.display = 'flex';
+            toast.style.alignItems = 'center';
+            toast.style.gap = '15px';
+            toast.style.maxWidth = '300px';
+
+            const msg = document.createElement('span');
+            msg.id = 'presence-toast-msg';
+
+            const close = document.createElement('span');
+            close.innerHTML = '&times;';
+            close.style.cursor = 'pointer';
+            close.style.fontSize = '1.2em';
+            close.onclick = () => {
+                toast.style.display = 'none';
+            };
+
+            toast.appendChild(msg);
+            toast.appendChild(close);
+            document.body.appendChild(toast);
+        }
+
+        toast.querySelector('#presence-toast-msg').textContent = message;
+        toast.style.display = 'flex';
     }
 
     // UI Elements for Login
