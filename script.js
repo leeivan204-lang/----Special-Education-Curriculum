@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Login & State ---
     let CURRENT_USER = null;
     let LAST_SYNCED_TIMESTAMP = null; // Track the base version for optimistic locking
+    let PENDING_SAVE_TIMESTAMP = null; // Track our own pending save to ignore self-notifications
     const API_BASE = 'http://localhost:3000/api';
 
     // Initialize Socket.IO
@@ -27,17 +28,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('connect', () => {
         console.log('Connected to WebSocket server');
+        if (CURRENT_USER) {
+            socket.emit('join', { userId: CURRENT_USER });
+        }
     });
 
     socket.on('data_updated', (data) => {
         console.log('Received data_updated event:', data);
 
-        // Check if the timestamp is newer than what we have
-        // But more importantly, if we are not the one who saved it.
-        // Simplified check: If the timestamp is different from our LAST_SYNCED_TIMESTAMP, it's new.
-        // Wait, if WE saved it, LAST_SYNCED_TIMESTAMP is already updated in saveAllDataToServer.
-        // So if data.timestamp > LAST_SYNCED_TIMESTAMP, it's from someone else.
+        // Ignore if this is the update we just sent (race condition fix)
+        if (PENDING_SAVE_TIMESTAMP && data.timestamp === PENDING_SAVE_TIMESTAMP) {
+            console.log('Ignoring self-generated update event');
+            return;
+        }
 
+        // Check if the timestamp is newer than what we have
         if (data.timestamp && data.timestamp !== LAST_SYNCED_TIMESTAMP) {
             showUpdateToast();
         }
@@ -411,6 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveAllDataToServer() {
         if (!CURRENT_USER) return;
         const data = getFullDataSnapshot();
+
+        // Set pending timestamp BEFORE fetch to catch race-condition events
+        PENDING_SAVE_TIMESTAMP = data.timestamp;
+
         try {
             // New optimistic locking payload
             const payload = {
@@ -460,6 +469,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error('Failed to save to server:', err);
+        } finally {
+            // Clear pending timestamp regardless of outcome
+            PENDING_SAVE_TIMESTAMP = null;
+        }
+    }
+
+    function restoreData(data, reload = false) {
+        if (!data) return;
+        localStorage.setItem('courses', JSON.stringify(data.courses || []));
+        localStorage.setItem('students', JSON.stringify(data.students || []));
+        localStorage.setItem('teachers', JSON.stringify(data.teachers || []));
+        localStorage.setItem('assignments', JSON.stringify(data.assignments || {}));
+        localStorage.setItem('scheduleData', JSON.stringify(data.scheduleData || {}));
+        localStorage.setItem('teacherPartTimeMarks', JSON.stringify(data.teacherPartTimeMarks || {}));
+        localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle || { prefix: '', year: '', semester: '', suffix: '' }));
+        localStorage.setItem('implementationDates', JSON.stringify(data.implementationDates || { startDate: '', endDate: '' }));
+        localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries || {}));
+        localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides || {}));
+
+        if (reload) {
+            window.location.reload();
         }
     }
 
@@ -480,6 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update LocalStorage (as backup)
         restoreData(data, false); // false = do not reload page
+        refreshAllViews(); // Force UI update
     }
 
     function refreshAllViews() {
