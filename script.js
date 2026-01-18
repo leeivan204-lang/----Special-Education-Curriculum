@@ -185,10 +185,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Fallback to local data (already loaded in variables below)
 
             // If we have absolutely no data (fresh offline load), try PORTABLE_DATA from data.js
-            if (courses.length === 0 && students.length === 0 && typeof window.PORTABLE_DATA !== 'undefined') {
-                console.log('Loading portable data (Spe for u default)...');
-                importDataToMemory(window.PORTABLE_DATA);
-            }
+            // [Modified] Disable auto-loading of Spe for u default data for new users
+            // if (courses.length === 0 && students.length === 0 && typeof window.PORTABLE_DATA !== 'undefined') {
+            //     console.log('Loading portable data (Spe for u default)...');
+            //     importDataToMemory(window.PORTABLE_DATA);
+            // }
         }
     }
 
