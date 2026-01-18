@@ -124,12 +124,14 @@ def save_data(user_id):
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)
         
-        # Broadcast update to room
+            # Broadcast update to room
         try:
             # We broadcast the new timestamp so clients know there is a new version
             # We don't broadcast full data (efficiency), just notification
+            socket_id = req_data.get('socketId') # Get sender's socket ID
             socketio.emit('data_updated', {
                 'timestamp': new_data.get('timestamp'),
+                'sourceSocketId': socket_id, # Echo back the sender's socket ID
                 'updater': request.remote_addr  # Optional: who updated?
             }, room=user_id)
             print(f"Broadcasted update for room {user_id}")

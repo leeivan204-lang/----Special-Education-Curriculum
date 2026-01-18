@@ -36,9 +36,15 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('data_updated', (data) => {
         console.log('Received data_updated event:', data);
 
-        // Ignore if this is the update we just sent (race condition fix)
+        // Robust Self-Notification Check via Socket ID
+        if (socket.id && data.sourceSocketId && socket.id === data.sourceSocketId) {
+            console.log('Ignoring self-generated update event (ID match)');
+            return;
+        }
+
+        // Secondary check (legacy/backup)
         if (PENDING_SAVE_TIMESTAMP && data.timestamp === PENDING_SAVE_TIMESTAMP) {
-            console.log('Ignoring self-generated update event');
+            console.log('Ignoring self-generated update event (Time match)');
             return;
         }
 
@@ -424,7 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // New optimistic locking payload
             const payload = {
                 data: data,
-                lastSyncedTimestamp: LAST_SYNCED_TIMESTAMP
+                lastSyncedTimestamp: LAST_SYNCED_TIMESTAMP,
+                socketId: socket.id // Send our socket ID so server can echo it back
             };
 
             const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
