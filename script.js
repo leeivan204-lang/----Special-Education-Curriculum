@@ -143,25 +143,129 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadDataAndSync() {
         try {
-            const resp = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`);
-            const result = await resp.json();
+            console.log('Starting data sync process...');
 
-            if (result.success && result.data) {
-                // Server has data -> Overwrite local memory & localStorage
-                console.log('Syncing data from server...');
-                importDataToMemory(result.data);
+            // 1. Fetch Server Data
+            const serverPromise = fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`)
+                .then(r => r.json())
+                .catch(err => ({ success: false, error: err }));
+
+            // 2. Fetch Cloud Data (if GAS URL exists)
+            let cloudPromise = Promise.resolve(null);
+            if (GAS_API_URL) {
+                console.log('Fetching Google Sheet data...');
+                cloudPromise = fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`)
+                    .then(r => r.json())
+                    .catch(err => {
+                        console.warn('Google Sheets fetch failed:', err);
+                        return null;
+                    });
+            }
+
+            // Wait for both
+            const [serverResult, cloudResult] = await Promise.all([serverPromise, cloudPromise]);
+
+            // --- A. Determine Best Remote Data (Server vs Cloud) ---
+            let bestRemoteData = null;
+            let serverHasData = serverResult && serverResult.success && serverResult.data;
+            let cloudHasData = cloudResult && (cloudResult.courses || cloudResult.data); // GAS usually returns data directly or inside .data
+
+            // Normalize cloud data structure
+            let normalizedCloudData = null;
+            if (cloudHasData) {
+                normalizedCloudData = cloudResult.data || cloudResult;
+            }
+
+            if (serverHasData && normalizedCloudData) {
+                // Both exist, compare timestamps
+                const serverTime = new Date(serverResult.data.timestamp || 0).getTime();
+                const cloudTime = new Date(normalizedCloudData.timestamp || 0).getTime();
+
+                if (cloudTime > serverTime) {
+                    // Cloud is newer
+                    const useCloud = confirm(
+                        `發現 Google Cloud 上有較新的備份！\n\n` +
+                        `雲端時間：${normalizedCloudData.timestamp}\n` +
+                        `伺服器時間：${serverResult.data.timestamp || '無'}\n\n` +
+                        `是否要匯入雲端資料？ (建議選擇「確定」)`
+                    );
+                    if (useCloud) {
+                        bestRemoteData = normalizedCloudData;
+                        // Sync Cloud -> Server immediately
+                        console.log('Syncing Cloud data to Server...');
+                        await saveToCustomServer(bestRemoteData);
+                    } else {
+                        bestRemoteData = serverResult.data;
+                    }
+                } else {
+                    // Server is newer or equal
+                    bestRemoteData = serverResult.data;
+                }
+            } else if (serverHasData) {
+                bestRemoteData = serverResult.data;
+            } else if (normalizedCloudData) {
+                console.log('Only cloud data found.');
+                const useCloud = confirm(
+                    `伺服器無資料，但發現 Google Cloud 上有備份！\n\n` +
+                    `雲端時間：${normalizedCloudData.timestamp}\n` +
+                    `是否要匯入雲端資料？`
+                );
+                if (useCloud) {
+                    bestRemoteData = normalizedCloudData;
+                    await saveToCustomServer(bestRemoteData);
+                }
+            }
+
+            // --- B. Compare Remote vs Local ---
+
+            if (bestRemoteData) {
+                // We have a candidate from remote (Server or Cloud)
+                const localTimestamp = localStorage.getItem('lastSavedTimestamp');
+
+                // If we have valid local data
+                if (courses.length > 0) {
+                    const remoteTime = new Date(bestRemoteData.timestamp || 0).getTime();
+                    const localTime = new Date(localTimestamp || 0).getTime();
+
+                    if (localTime > remoteTime) {
+                        // Local is newer! Conflict!
+                        const useLocal = confirm(
+                            `警告：偵測到本機資料比伺服器資料還要新！\n\n` +
+                            `本機時間：${localTimestamp}\n` +
+                            `遠端時間：${bestRemoteData.timestamp || '未知'}\n\n` +
+                            `請問要使用哪一份資料？\n` +
+                            `[確定] 保留本機資料 (並上傳覆蓋伺服器)\n` +
+                            `[取消] 使用伺服器資料 (本機未儲存的修改將遺失)`
+                        );
+
+                        if (useLocal) {
+                            console.log('User chose Local. Uploading to server...');
+                            await saveAllDataToServer();
+                            return; // Done, kept local
+                        } else {
+                            console.log('User chose Remote. Overwriting local...');
+                            importDataToMemory(bestRemoteData);
+                            return;
+                        }
+                    }
+                }
+
+                // Normal case: Remote is newer or local is empty/old -> Trust Remote
+                console.log('Loading remote data...');
+                importDataToMemory(bestRemoteData);
+
             } else {
-                // No server data -> First time?
-                // Check if we have local data. If yes, migrate it to server.
-                console.log('No server data found. Checking local data...');
+                // --- C. No Remote Data (New User) ---
+                console.log('No server or cloud data found.');
+
                 if (courses.length > 0 || students.length > 0) {
-                    // Local data found. Ask user what to do.
+                    // Local data found via leftover (Spe for u default or previous user)
                     const userWantsToImport = confirm(
                         `系統偵測到此裝置上有尚未清除的暫存資料。\n\n` +
-                        `ID "${CURRENT_USER}" 目前是沒資料的全新帳號。\n\n` +
+                        `ID "${CURRENT_USER}" 是全新的帳號 (伺服器與雲端皆無資料)。\n\n` +
                         `請問您想要將目前的暫存資料匯入到這個新帳號嗎？\n` +
-                        `[確定] 匯入目前的資料 (例如剛離線編輯過)\n` +
-                        `[取消] 建立全新的空白課表 (清除舊資料)`
+                        `[確定] 匯入目前的資料\n` +
+                        `[取消] 建立全新的空白課表`
                     );
 
                     if (userWantsToImport) {
@@ -170,47 +274,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         console.log('User chose fresh start. Resetting state...');
                         resetState();
-                        // Save the empty state to server so next time it's not "No server data"
                         await saveAllDataToServer();
-                        // Force UI refresh after reset
                         refreshAllViews();
                     }
                 } else {
-                    // Brand new user, empty start
                     console.log('No local data. Starting fresh.');
-                    // Save empty state to initialize the file on server
                     await saveAllDataToServer();
                 }
             }
+
         } catch (err) {
-            console.warn('Data sync failed (Offline Mode active):', err);
-
-            // Try enabling cloud sync from Google Sheets if server unavailable
-            try {
-                if (GAS_API_URL) {
-                    console.log('Attempting to fetch data from Google Sheets...');
-                    // Appending a query parameter to avoid caching and if the script uses it
-                    const gasResp = await fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`);
-                    const gasResult = await gasResp.json();
-                    if (gasResult && (gasResult.courses || gasResult.data)) {
-                        const finalData = gasResult.data || gasResult;
-                        console.log('Data loaded from Google Sheets');
-                        importDataToMemory(finalData);
-                        return;
-                    }
-                }
-            } catch (cloudErr) {
-                console.warn('Google Sheets sync failed:', cloudErr);
-            }
-            // Fallback to local data (already loaded in variables below)
-
-            // If we have absolutely no data (fresh offline load), try PORTABLE_DATA from data.js
-            // [Modified] Disable auto-loading of Spe for u default data for new users
-            // if (courses.length === 0 && students.length === 0 && typeof window.PORTABLE_DATA !== 'undefined') {
-            //     console.log('Loading portable data (Spe for u default)...');
-            //     importDataToMemory(window.PORTABLE_DATA);
-            // }
+            console.warn('Critical error during loadDataAndSync:', err);
+            // Fallback: Just let the user continue with whatever is in local memory
+            // alert('資料同步發生錯誤，將使用離線模式。');
         }
+    }
+
+    async function saveToCustomServer(data) {
+        try {
+            await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } catch (e) { console.error('Error saving to custom server:', e); }
     }
 
     async function saveAllDataToServer() {
