@@ -155,11 +155,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Check if we have local data. If yes, migrate it to server.
                 console.log('No server data found. Checking local data...');
                 if (courses.length > 0 || students.length > 0) {
-                    console.log('Local data found. Migrating to server...');
-                    await saveAllDataToServer();
+                    // Local data found. Ask user what to do.
+                    const userWantsToImport = confirm(
+                        `系統偵測到此裝置上有尚未清除的暫存資料。\n\n` +
+                        `ID "${CURRENT_USER}" 目前是沒資料的全新帳號。\n\n` +
+                        `請問您想要將目前的暫存資料匯入到這個新帳號嗎？\n` +
+                        `[確定] 匯入目前的資料 (例如剛離線編輯過)\n` +
+                        `[取消] 建立全新的空白課表 (清除舊資料)`
+                    );
+
+                    if (userWantsToImport) {
+                        console.log('User chose to import local data. Migrating to server...');
+                        await saveAllDataToServer();
+                    } else {
+                        console.log('User chose fresh start. Resetting state...');
+                        resetState();
+                        // Save the empty state to server so next time it's not "No server data"
+                        await saveAllDataToServer();
+                        // Force UI refresh after reset
+                        refreshAllViews();
+                    }
                 } else {
                     // Brand new user, empty start
                     console.log('No local data. Starting fresh.');
+                    // Save empty state to initialize the file on server
+                    await saveAllDataToServer();
                 }
             }
         } catch (err) {
