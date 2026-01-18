@@ -164,8 +164,31 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             console.warn('Data sync failed (Offline Mode active):', err);
+
+            // Try enabling cloud sync from Google Sheets if server unavailable
+            try {
+                if (GAS_API_URL) {
+                    console.log('Attempting to fetch data from Google Sheets...');
+                    // Appending a query parameter to avoid caching and if the script uses it
+                    const gasResp = await fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`);
+                    const gasResult = await gasResp.json();
+                    if (gasResult && (gasResult.courses || gasResult.data)) {
+                        const finalData = gasResult.data || gasResult;
+                        console.log('Data loaded from Google Sheets');
+                        importDataToMemory(finalData);
+                        return;
+                    }
+                }
+            } catch (cloudErr) {
+                console.warn('Google Sheets sync failed:', cloudErr);
+            }
             // Fallback to local data (already loaded in variables below)
-            // alert('警告：無法同步伺服器資料，將使用本機暫存資料。請檢查連線。'); 
+
+            // If we have absolutely no data (fresh offline load), try PORTABLE_DATA from data.js
+            if (courses.length === 0 && students.length === 0 && typeof window.PORTABLE_DATA !== 'undefined') {
+                console.log('Loading portable data (Spe for u default)...');
+                importDataToMemory(window.PORTABLE_DATA);
+            }
         }
     }
 
@@ -547,30 +570,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const data = getFullDataSnapshot();
-                // Add user ID for identification in the sheet
-                data.id = CURRENT_USER;
+                data.userId = CURRENT_USER; // Use consistent key 'userId'
 
-                // Use no-cors mode since we just want to send data and GAS return text/plain or json might be blocked by CORS policies strictly in some browsers 
-                // However, 'no-cors' treats response as opaque so we can't check success/fail easily from response body.
-                // Best practice for GAS Web App is to return JSONP or handle CORS text output correctly.
-                // Since this is a simple "fire and forget" or we hope for the best in this environment:
+                // Using standard POST. Script should handle doGet/doPost.
+                // Assuming the script returns JSON response. 
+                // Using no-cors might prevent reading response, trying standard first.
+                // If CORS issue, user might need to deploy GAS as "Anyone".
 
                 await fetch(GAS_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS often likes text/plain to avoid preflight
                     body: JSON.stringify(data)
                 });
 
-                alert('備份請求已發送！\n（因跨網域限制，無法確認 Google Sheet 是否寫入成功，請直接查看試算表）');
+                alert('備份請求已發送至 Google Cloud！');
+
             } catch (err) {
                 console.error(err);
-                alert('備份發送失敗：' + err.message);
+                alert('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
             } finally {
                 btnCloudBackup.disabled = false;
-                btnCloudBackup.textContent = '備份至 Google Sheet'; // Reset text
+                btnCloudBackup.textContent = '備份至 Google Cloud'; // Reset text
                 btnCloudBackup.innerHTML = '<span class="icon">☁️</span><span>備份至 Google Cloud</span>';
             }
         });

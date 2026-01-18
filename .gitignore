@@ -52,3 +52,4 @@ index.css.bak*
 *.record
 *.broken
 *.corrupted
+data.js
