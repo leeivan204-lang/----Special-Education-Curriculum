@@ -235,8 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             console.log('Starting data sync process...');
 
-            // 1. Fetch Server Data
-            const serverPromise = fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`)
+            // 1. Fetch Server Data (with cache busting)
+            const serverPromise = fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${new Date().getTime()}`)
                 .then(r => r.json())
                 .catch(err => ({ success: false, error: err }));
 
