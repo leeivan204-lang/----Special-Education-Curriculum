@@ -55,57 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showUpdateToast() {
-        // Create or reuse toast element
-        let toast = document.getElementById('update-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'update-toast';
-            toast.style.position = 'fixed';
-            toast.style.bottom = '20px';
-            toast.style.right = '20px';
-            toast.style.backgroundColor = '#333';
-            toast.style.color = '#fff';
-            toast.style.padding = '15px 25px';
-            toast.style.borderRadius = '5px';
-            toast.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
-            toast.style.zIndex = '9999';
-            toast.style.display = 'flex';
-            toast.style.alignItems = 'center';
-            toast.style.gap = '15px';
-            toast.style.transition = 'transform 0.3s ease-in-out';
-
-            const msg = document.createElement('span');
-            msg.textContent = '資料已更新，請載入最新版本。';
-
-            const btn = document.createElement('button');
-            btn.textContent = '立即載入';
-            btn.style.backgroundColor = '#4CAF50';
-            btn.style.border = 'none';
-            btn.style.color = 'white';
-            btn.style.padding = '5px 10px';
-            btn.style.borderRadius = '3px';
-            btn.style.cursor = 'pointer';
-
-            btn.onclick = async () => {
-                await loadDataAndSync(); // This will pull new data and update LAST_SYNCED_TIMESTAMP
-                toast.style.transform = 'translateY(150%)'; // Hide
-            };
-
-            const close = document.createElement('span');
-            close.innerHTML = '&times;';
-            close.style.cursor = 'pointer';
-            close.style.marginLeft = '10px';
-            close.onclick = () => {
-                toast.style.transform = 'translateY(150%)'; // Hide
-            };
-
-            toast.appendChild(msg);
-            toast.appendChild(btn);
-            toast.appendChild(close);
-            document.body.appendChild(toast);
-        }
-
-        toast.style.transform = 'translateY(0)'; // Show
+        // Function disabled per user request.
+        // Previously showed "Data Updated" toast.
+        return;
     }
 
     function showPresenceToast(message) {
@@ -114,26 +66,32 @@ document.addEventListener('DOMContentLoaded', () => {
             toast = document.createElement('div');
             toast.id = 'presence-toast';
             toast.style.position = 'fixed';
-            toast.style.bottom = '80px'; // Higher than update toast
-            toast.style.right = '20px';
+            toast.style.top = '0';
+            toast.style.left = '0';
+            toast.style.width = '100%';
             toast.style.backgroundColor = '#ff9800'; // Orange warning
             toast.style.color = '#fff';
-            toast.style.padding = '15px 25px';
-            toast.style.borderRadius = '5px';
-            toast.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+            toast.style.padding = '10px';
+            toast.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
             toast.style.zIndex = '10000';
             toast.style.display = 'flex';
+            toast.style.justifyContent = 'center';
             toast.style.alignItems = 'center';
-            toast.style.gap = '15px';
-            toast.style.maxWidth = '300px';
+            toast.style.gap = '20px';
+            toast.style.boxSizing = 'border-box';
 
             const msg = document.createElement('span');
             msg.id = 'presence-toast-msg';
+            msg.style.fontSize = '1.1em';
+            msg.style.fontWeight = 'bold';
 
             const close = document.createElement('span');
             close.innerHTML = '&times;';
             close.style.cursor = 'pointer';
-            close.style.fontSize = '1.2em';
+            close.style.fontSize = '1.5em';
+            close.style.opacity = '0.8';
+            close.onmouseover = () => close.style.opacity = '1';
+            close.onmouseout = () => close.style.opacity = '0.8';
             close.onclick = () => {
                 toast.style.display = 'none';
             };
@@ -470,7 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const payload = {
                 data: data,
                 lastSyncedTimestamp: LAST_SYNCED_TIMESTAMP,
-                socketId: socket.id // Send our socket ID so server can echo it back
+                socketId: socket.id, // Send our socket ID so server can echo it back
+                force: true // Force save to bypass conflict checks (Last Write Wins) as per user request
             };
 
             const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
@@ -479,33 +438,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload)
             });
 
-            if (response.status === 409) {
-                // Conflict detected!
-                const serverRes = await response.json();
-                console.warn('Conflict detected:', serverRes.message);
-
-                const userChoice = confirm(
-                    `【資料衝突警告】\n\n` +
-                    `系統偵測到您正在編輯的資料版本過舊，伺服器上已有較新的修改。\n` +
-                    `為避免資料遺失，請選擇「重新載入」以取得最新資料。\n\n` +
-                    `注意：您目前尚未儲存的修改將會遺失！\n\n` +
-                    `[確定] 重新載入 (Reload)\n` +
-                    `[取消] 取消 (Cancel) - 暫時停留在當前畫面`
-                );
-
-                if (userChoice) {
-                    // Reload
-                    console.log('User chose to reload after conflict.');
-                    await loadDataAndSync(); // This will refresh data from server
-                } else {
-                    // Cancel
-                    console.log('User cancelled conflict resolution. Local state preserved but unsaved.');
-                }
-                return;
-            }
+            /* 409 Conflict handling removed per user request (2026-01-19) - "No need to pop up this window" */
 
             if (!response.ok) {
-                throw new Error(`Server returned ${response.status} ${response.statusText}`);
+                // Ignore 409 if it somehow happens, but with force=true it shouldn't.
+                // If it's a real error (500), throw.
+                if (response.status !== 409) {
+                    throw new Error(`Server returned ${response.status} ${response.statusText}`);
+                }
             }
 
             console.log('Data saved to server successfully.');
