@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let studentManualEntries = JSON.parse(localStorage.getItem('studentManualEntries')) || {}; // { studentId: { 'monday-1': 'text', ... } }
     let slotOverrides = JSON.parse(localStorage.getItem('slotOverrides')) || {}; // { slotKey: { courseId: { groupName: [studentId, ...] } } }
-    let gasWebAppUrl = localStorage.getItem('gasWebAppUrl') || ''; // Store GAS Web App URL
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec';
 
     // Sanitize schedule data to remove invalid entries
     sanitizeScheduleData();
@@ -509,36 +509,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // New: Cloud Backup (Google Sheets)
     const btnCloudBackup = document.getElementById('btn-cloud-backup');
-    const inputGasUrl = document.getElementById('input-gas-url');
-    const btnSaveGasUrl = document.getElementById('btn-save-gas-url');
-    const gasStatus = document.getElementById('gas-status');
+    // UI elements for GAS URL have been removed
 
-    // Restore URL from local storage
-    if (inputGasUrl) {
-        inputGasUrl.value = gasWebAppUrl;
-        if (gasWebAppUrl && gasStatus) {
-            gasStatus.textContent = '已設定連結';
-        }
-    }
-
-    if (btnSaveGasUrl && inputGasUrl) {
-        btnSaveGasUrl.addEventListener('click', () => {
-            const url = inputGasUrl.value.trim();
-            if (url) {
-                gasWebAppUrl = url;
-                localStorage.setItem('gasWebAppUrl', gasWebAppUrl);
-                alert('Google Sheet URL 已儲存！');
-                if (gasStatus) gasStatus.textContent = '已設定連結';
-            } else {
-                alert('請輸入有效的 URL');
-            }
-        });
-    }
 
     if (btnCloudBackup) {
         btnCloudBackup.addEventListener('click', async () => {
-            if (!gasWebAppUrl) {
-                alert('請先設定 Google Apps Script 網址！');
+            if (!GAS_API_URL) {
+                alert('系統未設定 Google Apps Script 網址，請聯繫管理員！');
                 return;
             }
 
@@ -557,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Best practice for GAS Web App is to return JSONP or handle CORS text output correctly.
                 // Since this is a simple "fire and forget" or we hope for the best in this environment:
 
-                await fetch(gasWebAppUrl, {
+                await fetch(GAS_API_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: {
