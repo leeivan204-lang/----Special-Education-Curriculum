@@ -860,6 +860,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!skipConfirm) alert('備份請求已發送至 Google Cloud！');
+
+            // Update Cloud Backup Timestamp
+            localStorage.setItem('lastCloudBackupTimestamp', new Date().getTime());
+            updateCloudSyncStatus();
+
             return true;
 
         } catch (err) {
@@ -878,6 +883,50 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCloudBackup) {
         btnCloudBackup.addEventListener('click', () => backupToCloud(false));
     }
+
+    // Checking Cloud Sync Status
+    function updateCloudSyncStatus() {
+        if (!btnCloudBackup) return;
+
+        const localTs = parseInt(localStorage.getItem('lastSavedTimestamp') || '0');
+        const cloudTs = parseInt(localStorage.getItem('lastCloudBackupTimestamp') || '0');
+
+        const iconSpan = btnCloudBackup.querySelector('.icon');
+
+        if (localTs > cloudTs) {
+            // Unsynced changes
+            if (!document.getElementById('cloud-unsynced-dot')) {
+                const dot = document.createElement('span');
+                dot.id = 'cloud-unsynced-dot';
+                dot.style.cssText = 'position: absolute; top: 10px; right: 10px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; box-shadow: 0 0 0 2px #fff;';
+                btnCloudBackup.style.position = 'relative';
+                btnCloudBackup.appendChild(dot);
+            }
+            btnCloudBackup.title = "有尚未備份到雲端的變更";
+        } else {
+            // Synced or Cloud is newer (which is fine)
+            const dot = document.getElementById('cloud-unsynced-dot');
+            if (dot) dot.remove();
+            btnCloudBackup.title = "所有變更已備份到雲端";
+        }
+    }
+
+    // Call this whenever local data changes
+    const originalSave = saveAllDataToServer;
+    saveAllDataToServer = async function () {
+        await originalSave.apply(this, arguments);
+        // Update local TS is handled inside saveAllDataToServer (via getFullDataSnapshot -> stores timestamp?)
+        // Actually saveAllDataToServer calls getFullDataSnapshot which updates data.timestamp but not localStorage 'lastSavedTimestamp' explicitly?
+        // Let's check getFullDataSnapshot.
+        // Assuming it does, we just update status here.
+        // We'll manually set the local TS in localStorage if not set, to ensure comparison works
+        localStorage.setItem('lastSavedTimestamp', new Date().getTime());
+        updateCloudSyncStatus();
+    };
+
+    // Also call on load
+    updateCloudSyncStatus();
+
 
     if (btnLogout) {
         btnLogout.addEventListener('click', handleLogout);
