@@ -2462,8 +2462,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Check for overrides first
                             let groupStudents = assignments[course.id]?.[groupName] || [];
                             const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
+
                             if (override) {
-                                groupStudents = override;
+                                if (Array.isArray(override)) {
+                                    // Legacy support: Absolute list
+                                    groupStudents = override;
+                                } else if (override.type === 'delta') {
+                                    // New Delta support: Apply additions and removals
+                                    // 1. Filter out removed
+                                    groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
+                                    // 2. Add added (avoid duplicates)
+                                    override.added.forEach(sid => {
+                                        if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                                    });
+                                }
                             }
 
                             const studentNames = groupStudents.map(studentId => {
@@ -2607,9 +2619,22 @@ document.addEventListener('DOMContentLoaded', () => {
                                 // Normal Master Schedule Mode
                                 let groupStudents = assignments[course.id]?.[groupName] || [];
                                 const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
+
                                 if (override) {
-                                    groupStudents = override;
+                                    if (Array.isArray(override)) {
+                                        // Legacy support: Absolute list
+                                        groupStudents = override;
+                                    } else if (override.type === 'delta') {
+                                        // New Delta support: Apply additions and removals
+                                        // 1. Filter out removed
+                                        groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
+                                        // 2. Add added (avoid duplicates)
+                                        override.added.forEach(sid => {
+                                            if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                                        });
+                                    }
                                 }
+
                                 const studentNames = groupStudents.map(studentId => {
                                     const student = students.find(s => s.id === studentId);
                                     return student ? `${student.grade} ${student.name}` : '';
@@ -3886,9 +3911,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Get current students for this block (override or global)
         const globalStudents = assignments[courseId]?.[groupName] || [];
-        const overrideStudents = slotOverrides[slotKey]?.[courseId]?.[groupName];
-        const currentStudentIds = overrideStudents || globalStudents;
-        const isOverridden = !!overrideStudents;
+        const override = slotOverrides[slotKey]?.[courseId]?.[groupName];
+
+        let currentStudentIds = [...globalStudents];
+
+        if (override) {
+            if (Array.isArray(override)) {
+                // Legacy
+                currentStudentIds = override;
+            } else if (override.type === 'delta') {
+                // Delta: reconstruction
+                currentStudentIds = currentStudentIds.filter(sid => !override.removed.includes(sid));
+                override.added.forEach(sid => {
+                    if (!currentStudentIds.includes(sid)) currentStudentIds.push(sid);
+                });
+            }
+        }
+
+        const isOverridden = !!override;
 
         modalTitle.textContent = `編輯名單: ${course.name} ${groupName}`;
 
@@ -3911,6 +3951,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 studentListHTML += `<div class="grade-section"><h4>${grade} 年級</h4><div class="student-checkbox-grid">`;
                 studentsByGrade[grade].forEach(student => {
                     const isChecked = currentStudentIds.includes(student.id);
+                    // Check if this student is effectively overridden (differs from global)
+                    // Visual cue: bold or color if manually added/removed? 
+                    // For now simple check.
+
                     studentListHTML += `
                         <label class="student-checkbox-item ${isChecked ? 'checked' : ''}">
                             <input type="checkbox" value="${student.id}" ${isChecked ? 'checked' : ''}>
@@ -3926,7 +3970,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalBody.innerHTML = `
             <div class="override-info">
                 <p>正在編輯 <strong>${groupName}</strong> 在此時段的學生名單。</p>
-                ${isOverridden ? '<p class="override-status active">⚠️ 此時段目前使用自訂名單</p>' : '<p class="override-status">目前使用全域預設名單</p>'}
+                ${isOverridden ? '<p class="override-status active">⚠️ 此時段目前使用微調名單 (與主名單連動)</p>' : '<p class="override-status">目前使用全域預設名單</p>'}
             </div>
             <div class="student-selector-container">
                 ${studentListHTML}
@@ -3955,10 +3999,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]:checked');
         const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
+        const globalStudents = assignments[courseId]?.[groupName] || [];
+
+        // Calculate Delta
+        const added = selectedIds.filter(id => !globalStudents.includes(id));
+        const removed = globalStudents.filter(id => !selectedIds.includes(id));
+
         if (!slotOverrides[slotKey]) slotOverrides[slotKey] = {};
         if (!slotOverrides[slotKey][courseId]) slotOverrides[slotKey][courseId] = {};
 
-        slotOverrides[slotKey][courseId][groupName] = selectedIds;
+        // If no changes relative to global, remove override
+        if (added.length === 0 && removed.length === 0) {
+            delete slotOverrides[slotKey][courseId][groupName];
+            if (Object.keys(slotOverrides[slotKey][courseId]).length === 0) delete slotOverrides[slotKey][courseId];
+            if (Object.keys(slotOverrides[slotKey]).length === 0) delete slotOverrides[slotKey];
+        } else {
+            // Save as Delta
+            slotOverrides[slotKey][courseId][groupName] = {
+                type: 'delta',
+                added: added,
+                removed: removed
+            };
+        }
 
         localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
         renderMasterSchedule();
