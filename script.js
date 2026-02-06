@@ -1954,6 +1954,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeModal() {
         modal.style.display = 'none';
         modalConfirm.onclick = null;
+        // Remove the clear/reset button when closing (only exists in Student Override Modal)
+        const clearBtn = modal.querySelector('.btn-clear-override');
+        if (clearBtn) clearBtn.remove();
     }
 
     // Global Helpers
@@ -3352,7 +3355,290 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('studentManualEntries', JSON.stringify(studentManualEntries));
         generateStudentSchedules();
         closeModal();
+        saveAllDataToServer();
     };
+
+    // Student Override Modal Functions (for Master Schedule)
+    window.openStudentOverrideModal = function (slotKey, courseId, groupName) {
+        const course = courses.find(c => c.id === courseId);
+        if (!course) return;
+
+        // Get base student list from assignments
+        const baseStudents = assignments[courseId]?.[groupName] || [];
+
+        // Get current override
+        const override = slotOverrides[slotKey]?.[courseId]?.[groupName];
+
+        // Calculate current effective student list
+        let currentStudents = [...baseStudents];
+        if (override) {
+            if (Array.isArray(override)) {
+                // Legacy: absolute list
+                currentStudents = override;
+            } else if (override.type === 'delta') {
+                // Delta: apply changes
+                currentStudents = currentStudents.filter(sid => !override.removed.includes(sid));
+                override.added.forEach(sid => {
+                    if (!currentStudents.includes(sid)) currentStudents.push(sid);
+                });
+            }
+        }
+
+        const isOverridden = !!override;
+
+        // Parse slot key for display
+        const [day, period] = slotKey.split('-');
+        const dayNames = {
+            'monday': '星期一', 'tuesday': '星期二', 'wednesday': '星期三',
+            'thursday': '星期四', 'friday': '星期五'
+        };
+        const periodNames = {
+            'morning': '早自習', '1': '第一節', '2': '第二節', '3': '第三節', '4': '第四節',
+            'lunch': '午休', '5': '第五節', '6': '第六節', '7': '第七節'
+        };
+
+        modalTitle.textContent = `正在編輯 ${course.name} 在此時段的學生名單。`;
+
+        // Sort students by grade (descending) then name
+        const sortedStudents = [...students].sort((a, b) => {
+            if (b.grade !== a.grade) return b.grade - a.grade;
+            return a.name.localeCompare(b.name);
+        });
+
+        // Group students by grade
+        const studentsByGrade = { 9: [], 8: [], 7: [] };
+        sortedStudents.forEach(s => {
+            if (studentsByGrade[s.grade]) studentsByGrade[s.grade].push(s);
+        });
+
+        // Build grade-based HTML
+        let studentListHTML = '';
+        [9, 8, 7].forEach(grade => {
+            if (studentsByGrade[grade].length > 0) {
+                studentListHTML += `<div class="grade-section" style="margin-bottom: 1rem;"><h4 style="color: #3b82f6; margin-bottom: 0.5rem;">${grade} 年級</h4><div class="student-checkbox-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">`;
+                studentsByGrade[grade].forEach(student => {
+                    const isChecked = currentStudents.includes(student.id);
+                    studentListHTML += `
+                        <label class="student-checkbox-item" style="display: flex; align-items: center; padding: 8px; background: ${isChecked ? '#dbeafe' : '#fff'}; border: 1px solid ${isChecked ? '#3b82f6' : '#e5e7eb'}; border-radius: 4px; cursor: pointer;">
+                            <input type="checkbox" value="${student.id}" ${isChecked ? 'checked' : ''} style="margin-right: 8px; width: 16px; height: 16px;">
+                            <span style="display: inline-block; min-width: 24px; font-weight: 600; color: #6b7280; background: #e5e7eb; border-radius: 50%; text-align: center; margin-right: 6px;">${student.grade}</span>
+                            <span style="font-weight: 500;">${student.name}</span>
+                        </label>
+                    `;
+                });
+                studentListHTML += `</div></div>`;
+            }
+        });
+
+        let html = `
+            <div style="margin-bottom: 1rem; padding: 10px; background: ${isOverridden ? '#fef3c7' : '#f0f9ff'}; border-left: 3px solid ${isOverridden ? '#f59e0b' : '#3b82f6'}; border-radius: 4px;">
+                ${isOverridden ? '<strong>⚠️ 此時段目前使用微調名單</strong>' : '<strong>目前使用全域預設名單</strong>'}
+            </div>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+                ${studentListHTML}
+            </div>
+        `;
+
+        modalBody.innerHTML = html;
+
+        // Add checkbox change listeners for visual feedback
+        setTimeout(() => {
+            const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const label = e.target.closest('label');
+                    if (e.target.checked) {
+                        label.style.background = '#dbeafe';
+                        label.style.borderColor = '#3b82f6';
+                    } else {
+                        label.style.background = '#fff';
+                        label.style.borderColor = '#e5e7eb';
+                    }
+                });
+            });
+        }, 0);
+
+        // Store context for save function
+        modalConfirm.onclick = () => saveStudentOverride(slotKey, courseId, groupName, baseStudents);
+
+        // Add reset button ONLY for this modal
+        const modalFooter = modal.querySelector('.modal-footer');
+        // Remove any existing clear button first
+        const existingClearBtn = modalFooter.querySelector('.btn-clear-override');
+        if (existingClearBtn) existingClearBtn.remove();
+
+        const resetBtn = document.createElement('button');
+        resetBtn.textContent = '🔄 重設此時段調整';
+        resetBtn.className = 'btn-secondary btn-clear-override';
+        resetBtn.style.marginRight = '10px';
+        resetBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Reset button clicked:', slotKey, courseId, groupName);
+            clearStudentOverride(slotKey, courseId, groupName);
+        };
+        modalFooter.insertBefore(resetBtn, modalFooter.firstChild);
+
+        modal.style.display = 'block';
+    };
+
+
+    function saveStudentOverride(slotKey, courseId, groupName, baseStudents) {
+        // Get selected students
+        const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]:checked');
+        const selectedStudents = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+        // Calculate delta
+        const added = selectedStudents.filter(sid => !baseStudents.includes(sid));
+        const removed = baseStudents.filter(sid => !selectedStudents.includes(sid));
+
+        // Initialize structure if needed
+        if (!slotOverrides[slotKey]) slotOverrides[slotKey] = {};
+        if (!slotOverrides[slotKey][courseId]) slotOverrides[slotKey][courseId] = {};
+
+        let hasChanges = false;
+        if (added.length === 0 && removed.length === 0) {
+            // No changes, remove override
+            delete slotOverrides[slotKey][courseId][groupName];
+            if (Object.keys(slotOverrides[slotKey][courseId]).length === 0) {
+                delete slotOverrides[slotKey][courseId];
+            }
+            if (Object.keys(slotOverrides[slotKey]).length === 0) {
+                delete slotOverrides[slotKey];
+            }
+        } else {
+            // Store delta
+            slotOverrides[slotKey][courseId][groupName] = {
+                type: 'delta',
+                added: added,
+                removed: removed
+            };
+            hasChanges = true;
+        }
+
+        // Close modal first
+        closeModal();
+
+        // Show loading overlay
+        showLoadingOverlay('正在更新課表...');
+
+        // Save to localStorage
+        localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+
+        // Force re-render with loading feedback
+        setTimeout(() => {
+            renderMasterSchedule();
+            hideLoadingOverlay();
+
+            // Show feedback based on changes
+            if (hasChanges) {
+                showToast(`✅ 已調整學生名單 (新增${added.length}位，移除${removed.length}位)`, 'success');
+            } else {
+                showToast('✅ 已恢復為原始分組設定', 'info');
+            }
+        }, 150);
+
+        saveAllDataToServer();
+    }
+
+    // Loading overlay functions
+    function showLoadingOverlay(message) {
+        let overlay = document.getElementById('loading-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'loading-overlay';
+            overlay.innerHTML = `
+                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99999; display: flex; justify-content: center; align-items: center;">
+                    <div style="background: white; padding: 30px 50px; border-radius: 10px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                        <div style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top: 4px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px;"></div>
+                        <div id="loading-message" style="font-size: 16px; color: #374151; font-weight: 500;">${message}</div>
+                    </div>
+                </div>
+                <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+            `;
+            document.body.appendChild(overlay);
+        } else {
+            document.getElementById('loading-message').textContent = message;
+            overlay.style.display = 'block';
+        }
+    }
+
+    function hideLoadingOverlay() {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.remove();
+    }
+
+    function showToast(message, type = 'info') {
+        // Remove existing toast
+        const existing = document.getElementById('action-toast');
+        if (existing) existing.remove();
+
+        const colors = {
+            success: { bg: '#10b981', border: '#059669' },
+            info: { bg: '#3b82f6', border: '#2563eb' },
+            warning: { bg: '#f59e0b', border: '#d97706' },
+            error: { bg: '#ef4444', border: '#dc2626' }
+        };
+        const color = colors[type] || colors.info;
+
+        const toast = document.createElement('div');
+        toast.id = 'action-toast';
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${color.bg};
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 100000;
+            font-weight: 500;
+            animation: slideIn 0.3s ease-out;
+        `;
+        toast.innerHTML = `<style>@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }</style>${message}`;
+        document.body.appendChild(toast);
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    function clearStudentOverride(slotKey, courseId, groupName) {
+        // Close modal first
+        closeModal();
+
+        const hasOverride = slotOverrides[slotKey]?.[courseId]?.[groupName];
+
+        if (hasOverride) {
+            // Show loading overlay
+            showLoadingOverlay('正在重設名單...');
+
+            delete slotOverrides[slotKey][courseId][groupName];
+
+            if (Object.keys(slotOverrides[slotKey][courseId]).length === 0) {
+                delete slotOverrides[slotKey][courseId];
+            }
+            if (Object.keys(slotOverrides[slotKey]).length === 0) {
+                delete slotOverrides[slotKey];
+            }
+
+            localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+            saveAllDataToServer();
+
+            // Refresh with delay
+            setTimeout(() => {
+                renderMasterSchedule();
+                hideLoadingOverlay();
+                showToast('✅ 已恢復為分組管理中的原始設定', 'success');
+            }, 150);
+        } else {
+            showToast('此時段未進行過調整', 'info');
+        }
+    }
+
 
     function generateClassroomSchedules() {
         let html = '';
@@ -3901,145 +4187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         wrapper.innerHTML = html;
-    };
-
-    // --- Student Override Functions ---
-
-    window.openStudentOverrideModal = function (slotKey, courseId, groupName) {
-        const course = courses.find(c => c.id === courseId);
-        if (!course) return;
-
-        // Get current students for this block (override or global)
-        const globalStudents = assignments[courseId]?.[groupName] || [];
-        const override = slotOverrides[slotKey]?.[courseId]?.[groupName];
-
-        let currentStudentIds = [...globalStudents];
-
-        if (override) {
-            if (Array.isArray(override)) {
-                // Legacy
-                currentStudentIds = override;
-            } else if (override.type === 'delta') {
-                // Delta: reconstruction
-                currentStudentIds = currentStudentIds.filter(sid => !override.removed.includes(sid));
-                override.added.forEach(sid => {
-                    if (!currentStudentIds.includes(sid)) currentStudentIds.push(sid);
-                });
-            }
-        }
-
-        const isOverridden = !!override;
-
-        modalTitle.textContent = `編輯名單: ${course.name} ${groupName}`;
-
-        // Generate student checkboxes
-        // Sort students by grade then name
-        const sortedStudents = [...students].sort((a, b) => {
-            if (b.grade !== a.grade) return b.grade - a.grade;
-            return a.name.localeCompare(b.name);
-        });
-
-        // Split students by grade for better UI
-        const studentsByGrade = { 7: [], 8: [], 9: [] };
-        sortedStudents.forEach(s => {
-            if (studentsByGrade[s.grade]) studentsByGrade[s.grade].push(s);
-        });
-
-        let studentListHTML = '';
-        [9, 8, 7].forEach(grade => {
-            if (studentsByGrade[grade].length > 0) {
-                studentListHTML += `<div class="grade-section"><h4>${grade} 年級</h4><div class="student-checkbox-grid">`;
-                studentsByGrade[grade].forEach(student => {
-                    const isChecked = currentStudentIds.includes(student.id);
-                    // Check if this student is effectively overridden (differs from global)
-                    // Visual cue: bold or color if manually added/removed? 
-                    // For now simple check.
-
-                    studentListHTML += `
-                        <label class="student-checkbox-item ${isChecked ? 'checked' : ''}">
-                            <input type="checkbox" value="${student.id}" ${isChecked ? 'checked' : ''}>
-                            <span class="student-grade-badge">${student.grade}</span>
-                            ${student.name}
-                        </label>
-                    `;
-                });
-                studentListHTML += `</div></div>`;
-            }
-        });
-
-        modalBody.innerHTML = `
-            <div class="override-info">
-                <p>正在編輯 <strong>${groupName}</strong> 在此時段的學生名單。</p>
-                ${isOverridden ? '<p class="override-status active">⚠️ 此時段目前使用微調名單 (與主名單連動)</p>' : '<p class="override-status">目前使用全域預設名單</p>'}
-            </div>
-            <div class="student-selector-container">
-                ${studentListHTML}
-            </div>
-            <div class="override-actions" style="margin-top: 1rem; display: flex; justify-content: space-between;">
-                 <button class="btn-secondary" onclick="resetStudentOverride('${slotKey}', ${courseId}, '${groupName}')">重置為預設名單</button>
-            </div>
-        `;
-
-        // Add event listeners to checkboxes to toggle styling
-        setTimeout(() => {
-            const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.addEventListener('change', (e) => {
-                    if (e.target.checked) e.target.closest('label').classList.add('checked');
-                    else e.target.closest('label').classList.remove('checked');
-                });
-            });
-        }, 0);
-
-        modalConfirm.onclick = () => saveStudentOverride(slotKey, courseId, groupName);
-        modal.style.display = 'block';
-    };
-
-    window.saveStudentOverride = function (slotKey, courseId, groupName) {
-        const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]:checked');
-        const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
-
-        const globalStudents = assignments[courseId]?.[groupName] || [];
-
-        // Calculate Delta
-        const added = selectedIds.filter(id => !globalStudents.includes(id));
-        const removed = globalStudents.filter(id => !selectedIds.includes(id));
-
-        if (!slotOverrides[slotKey]) slotOverrides[slotKey] = {};
-        if (!slotOverrides[slotKey][courseId]) slotOverrides[slotKey][courseId] = {};
-
-        // If no changes relative to global, remove override
-        if (added.length === 0 && removed.length === 0) {
-            delete slotOverrides[slotKey][courseId][groupName];
-            if (Object.keys(slotOverrides[slotKey][courseId]).length === 0) delete slotOverrides[slotKey][courseId];
-            if (Object.keys(slotOverrides[slotKey]).length === 0) delete slotOverrides[slotKey];
-        } else {
-            // Save as Delta
-            slotOverrides[slotKey][courseId][groupName] = {
-                type: 'delta',
-                added: added,
-                removed: removed
-            };
-        }
-
-        localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
-        renderMasterSchedule();
-        closeModal();
-    };
-
-    window.resetStudentOverride = function (slotKey, courseId, groupName) {
-        if (confirm('確定要重置為預設名單嗎？此時段的特殊設定將被移除。')) {
-            if (slotOverrides[slotKey] && slotOverrides[slotKey][courseId]) {
-                delete slotOverrides[slotKey][courseId][groupName];
-                // Clean up empty objects
-                if (Object.keys(slotOverrides[slotKey][courseId]).length === 0) delete slotOverrides[slotKey][courseId];
-                if (Object.keys(slotOverrides[slotKey]).length === 0) delete slotOverrides[slotKey];
-
-                localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
-                renderMasterSchedule();
-                closeModal();
-            }
-        }
     };
 
 
