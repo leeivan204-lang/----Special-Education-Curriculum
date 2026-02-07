@@ -239,9 +239,10 @@ body {
 /* Empty State */
 .empty-state {
     text-align: center;
-    padding: 3rem;
+    padding: 1.5rem;
     color: #95a5a6;
-    font-size: 1.1rem;
+    font-size: 1rem;
+    line-height: 1.6;
 }
 
 /* Course Management */
