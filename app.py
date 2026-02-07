@@ -432,7 +432,7 @@ def generate_word_teacher_schedule(data):
 
         # Subheader: Teacher Name
         name_p = document.add_paragraph()
-        name_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        name_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         name_run = name_p.add_run(f"任課教師：{teacher['name']} 老師")
         name_run.font.size = Pt(16)
         name_run.font.name = '標楷體'
@@ -550,6 +550,7 @@ def generate_word_teacher_schedule(data):
         # Footer Stats Table (Total, Base, PartTime, Overtime)
         stats = teacher.get('stats_table', {})
         st_table = document.add_table(rows=1, cols=4)
+        st_table.style = 'Table Grid'
         st_table.allow_autofit = True
         
         row = st_table.rows[0]
