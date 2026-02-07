@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Frontend Tests</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .test-pass {
+            color: green;
+        }
+
+        .test-fail {
+            color: red;
+            font-weight: bold;
+        }
+
+        .summary {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+    <!-- Mock dependencies before script.js loads -->
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const results = document.getElementById('results');
+            if (results) {
+                results.innerHTML += '<div class="test-fail">Global Error: ' + msg + ' at line ' + line + '</div>';
+            }
+            console.error('Global Error:', msg, error);
+            return false;
+        };
+
+        // Mock Socket.io
+        window.io = function () {
+            return {
+                on: function (event, callback) { },
+                emit: function (event, data) { },
+                id: 'test-socket-id',
+                connect: function () { },
+                disconnect: function () { }
+            };
+        };
+
+        // Mock DOM elements that script.js expects
+        document.addEventListener('DOMContentLoaded', () => {
+            const ids = [
+                'schedule-view', 'login-section', 'main-app-section', 'btn-login', 'btn-register',
+                'login-id', 'login-message', 'presence-toast', 'modal', 'modal-title', 'modal-body',
+                'modal-close', 'modal-cancel', 'modal-confirm', 'course-list', 'student-list',
+                'teacher-list', 'master-schedule-container', 'course-blocks-container', 'groups-columns',
+                'student-pool', 'grouping-workspace', 'grouping-empty-state', 'grouping-course-select',
+                'btn-add-course', 'btn-add-student', 'btn-add-teacher'
+            ];
+            ids.forEach(id => {
+                if (!document.getElementById(id)) {
+                    const el = document.createElement('div');
+                    el.id = id;
+                    document.body.appendChild(el);
+                    // Hide mocks
+                    el.style.display = 'none';
+                }
+            });
+
+            // Start Tests after a short delay to ensure script.js initialized
+            setTimeout(runTests, 500);
+        });
+    </script>
+    <script src="script.js"></script>
+</head>
+
+<body>
+    <h1>Frontend Tests Report</h1>
+    <div id="results">Running tests...</div>
+
+    <script>
+        function log(msg, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.textContent = msg;
+            if (type === 'pass') div.className = 'test-pass';
+            if (type === 'fail') div.className = 'test-fail';
+            results.appendChild(div);
+        }
+
+        let passed = 0;
+        let failed = 0;
+
+        async function runTests() {
+            console.log('Starting tests...');
+            document.getElementById('results').innerHTML = ''; // Clear "Running tests..."
+
+            if (!window.__TEST__) {
+                log('FATAL: window.__TEST__ not found. script.js modification failed?', 'fail');
+                return;
+            }
+
+            const {
+                parseTimestamp,
+                sanitizeScheduleData,
+                scheduleData, // getter
+                courses,      // getter
+            } = window.__TEST__;
+
+            // --- Utils Tests ---
+            log('--- Utils Tests ---');
+
+            // parseTimestamp
+            assertEqual(parseTimestamp('2025/01/01 12:00:00'), new Date(2025, 0, 1, 12, 0, 0).getTime(), 'Standard ISO format');
+
+            // Invalid
+            assertEqual(parseTimestamp(null), 0, 'Null timestamp');
+            assertEqual(parseTimestamp('invalid'), 0, 'Invalid timestamp');
+
+            // --- Sanitization Tests ---
+            log('--- Sanitization Tests ---');
+
+            // Mock Data
+            const mockCourses = [{ id: 1, name: 'C1' }];
+
+            // Inject mock data into closure via setter if available, or just manipulate objects if referenced
+            // We exposed setters in script.js modification
+            window.__TEST__.courses = mockCourses;
+
+            // Reset scheduleData
+            // Since scheduleData is a let variable inside closure, we can't easily replace the whole object reference 
+            // unless we had a setter. We only exposed a getter. 
+            // But verify: `scheduleData` in script.js is a `let`.
+            // Our exposure: `get scheduleData() { return scheduleData; }`
+            // Modifying properties of the returned object works!
+
+            const sd = window.__TEST__.scheduleData;
+            // Clear existing
+            for (let k in sd) delete sd[k];
+
+            // Add valid item
+            sd['monday-1'] = [{ blockIndex: 0, courseId: 1 }];
+            // Add invalid item (courseId not in mockCourses)
+            sd['monday-2'] = [{ blockIndex: 0, courseId: 999 }];
+
+            // Run sanitize
+            window.__TEST__.sanitizeScheduleData();
+
+            // Verify
+            if (sd['monday-1'] && sd['monday-1'].length === 1) {
+                log('PASS: Valid item kept', 'pass'); passed++;
+            } else {
+                log('FAIL: Valid item removed', 'fail'); failed++;
+            }
+
+            if (!sd['monday-2']) {
+                log('PASS: Invalid item removed', 'pass'); passed++;
+            } else {
+                log('FAIL: Invalid item NOT removed', 'fail'); failed++;
+            }
+
+            // Summary
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            summary.textContent = `Tests Completed. Passed: ${passed}, Failed: ${failed}`;
+            document.body.appendChild(summary);
+
+            if (failed === 0) {
+                // Create a hidden element for browser tool to detect success
+                const done = document.createElement('div');
+                done.id = 'test-success';
+                document.body.appendChild(done);
+            }
+        }
+
+        function assertEqual(actual, expected, msg) {
+            if (actual === expected) {
+                log(`PASS: ${msg}`, 'pass');
+                passed++;
+            } else {
+                log(`FAIL: ${msg} (Expected ${expected}, got ${actual})`, 'fail');
+                failed++;
+            }
+        }
+    </script>
+</body>
+
+</html>

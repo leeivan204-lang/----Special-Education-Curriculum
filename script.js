@@ -228,6 +228,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (loginMessage) loginMessage.textContent = msg;
     }
 
+    // Helper: Robust Timestamp Parser
+    function parseTimestamp(ts) {
+        if (!ts) return 0;
+        try {
+            let date = new Date(ts);
+            if (!isNaN(date.getTime())) return date.getTime();
+            let cleanTs = ts.replace(/上午|下午|AM|PM/g, ' ').trim();
+            const parts = cleanTs.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/);
+            if (parts) {
+                let [_, y, m, d, h, min, s] = parts;
+                h = parseInt(h);
+                if (ts.includes('下午') || ts.includes('PM')) {
+                    if (h < 12) h += 12;
+                } else if (ts.includes('上午') || ts.includes('AM')) {
+                    if (h === 12) h = 0;
+                }
+                return new Date(y, m - 1, d, h, min, s).getTime();
+            }
+            return 0;
+        } catch (e) {
+            console.warn('Date parsing failed for:', ts, e);
+            return 0;
+        }
+    }
+
     async function loadDataAndSync() {
         try {
             console.log('Starting data sync process...');
@@ -239,7 +264,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2. Fetch Cloud Data (if GAS URL exists)
             let cloudPromise = Promise.resolve(null);
-            if (GAS_API_URL) {
+            try { console.log('DEBUG: GAS_API_URL is', GAS_API_URL); } catch (e) { console.log('DEBUG: GAS_API_URL error', e.message); }
+            if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL) {
                 console.log('Fetching Google Sheet data...');
                 cloudPromise = fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`)
                     .then(r => r.json())
@@ -380,30 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // alert('資料同步發生錯誤，將使用離線模式。');
         }
 
-        // Helper: Robust Timestamp Parser
-        function parseTimestamp(ts) {
-            if (!ts) return 0;
-            try {
-                let date = new Date(ts);
-                if (!isNaN(date.getTime())) return date.getTime();
-                let cleanTs = ts.replace(/上午|下午|AM|PM/g, ' ').trim();
-                const parts = cleanTs.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/);
-                if (parts) {
-                    let [_, y, m, d, h, min, s] = parts;
-                    h = parseInt(h);
-                    if (ts.includes('下午') || ts.includes('PM')) {
-                        if (h < 12) h += 12;
-                    } else if (ts.includes('上午') || ts.includes('AM')) {
-                        if (h === 12) h = 0;
-                    }
-                    return new Date(y, m - 1, d, h, min, s).getTime();
-                }
-                return 0;
-            } catch (e) {
-                console.warn('Date parsing failed for:', ts, e);
-                return 0;
-            }
-        }
     }
 
     async function saveToCustomServer(data) {
@@ -461,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function restoreData(data, reload = false) {
+    function syncLocalStorage(data, reload = false) {
         if (!data) return;
         localStorage.setItem('courses', JSON.stringify(data.courses || []));
         localStorage.setItem('students', JSON.stringify(data.students || []));
@@ -495,11 +497,12 @@ document.addEventListener('DOMContentLoaded', () => {
         slotOverrides = data.slotOverrides || {};
 
         // Update LocalStorage (as backup)
-        restoreData(data, false); // false = do not reload page
+        syncLocalStorage(data, false); // false = do not reload page
         refreshAllViews(); // Force UI update
     }
 
     function refreshAllViews() {
+        if (window.__TEST__ && window.__TEST__.skipRender) return;
         renderCourseList();
         renderStudentList();
         renderTeacherList();
@@ -4871,6 +4874,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
+    }
+    // --- Expose for Testing ---
+    if (typeof window !== 'undefined') {
+        window.__TEST__ = {
+            sanitizeScheduleData,
+            parseTimestamp,
+            syncLocalStorage,
+            restoreData,
+            loadDataAndSync,
+            saveAllDataToServer,
+            saveToCustomServer,
+            importDataToMemory,
+            // Expose state variables via getters/setters if needed, or object references
+            get scheduleData() { return scheduleData; },
+            get courses() { return courses; },
+            set courses(val) { courses = val; },
+            get students() { return students; },
+            set students(val) { students = val; },
+            get CURRENT_USER() { return CURRENT_USER; },
+            set CURRENT_USER(val) { CURRENT_USER = val; },
+            get LAST_SYNCED_TIMESTAMP() { return LAST_SYNCED_TIMESTAMP; },
+            set LAST_SYNCED_TIMESTAMP(val) { LAST_SYNCED_TIMESTAMP = val; }
+        };
     }
 });
 
