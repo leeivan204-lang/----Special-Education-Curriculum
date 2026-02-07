@@ -397,7 +397,7 @@ body {
 .grouping-workspace {
     display: flex;
     gap: 1.5rem;
-    height: calc(100vh - 400px);
+    height: calc(100vh - 240px);
 }
 
 .groups-columns-container {
