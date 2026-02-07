@@ -4708,11 +4708,14 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const scheduleType = document.getElementById('schedule-type-select').value;
 
+            // 檢查是否為不支援Word匯出的課表類型
+            if (scheduleType === 'master' || scheduleType === 'classroom_integrated' || scheduleType === 'classroom') {
+                alert('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
+                return;
+            }
+
             if (scheduleType === 'teacher') {
                 await window.exportTeacherScheduleWord(btn);
-                return;
-            } else if (scheduleType === 'classroom') {
-                await window.exportClassroomScheduleWord(btn);
                 return;
             } else if (scheduleType === 'student') {
                 await window.exportStudentScheduleWord(btn);
