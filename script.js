@@ -1782,7 +1782,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function createDraggableStudentHTML(student) {
         return `
             <div class="draggable-student" draggable="true" data-student-id="${student.id}">
-                <span class="student-grade" onclick="toggleGrade(event, ${student.id})" style="cursor: pointer;" title="點擊切換年級">${student.grade}</span>
+                <span class="student-grade">${student.grade}</span>
                 ${student.name}
             </div>
         `;
@@ -2025,6 +2025,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Global Helpers
     window.toggleGrade = function (event, id) {
         event.stopPropagation(); // Prevent drag start or other clicks
+
+        // 檢查是否在學生管理頁面
+        const studentsView = document.getElementById('students-view');
+        if (!studentsView || !studentsView.classList.contains('active')) {
+            // 不在學生管理頁面，不執行切換
+            return;
+        }
+
         const student = students.find(s => s.id === id);
         if (student) {
             // Cycle 7 -> 8 -> 9 -> 7
