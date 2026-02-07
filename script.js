@@ -1425,6 +1425,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         courseListContainer.innerHTML = courses.map(course => {
+            // 防禦性檢查：確保 groups 是陣列
+            if (!Array.isArray(course.groups) || course.groups.length === 0) {
+                console.warn('Invalid course data (missing or invalid groups):', course);
+                return ''; // 跳過此課程
+            }
+
             // Get hours from first group (assuming shared)
             const firstGroup = course.groups[0];
             const hours = course.groupDetails && course.groupDetails[firstGroup] ? course.groupDetails[firstGroup].hours : '0';
@@ -1463,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
             `;
-        }).join('');
+        }).filter(html => html).join('');
     }
 
     // --- Student Functions ---
