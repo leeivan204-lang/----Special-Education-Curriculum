@@ -661,7 +661,7 @@ def generate_word_student_schedule(data):
         name_p = document.add_paragraph()
         name_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         name_run = name_p.add_run(f"{student['name']}")
-        name_run.font.size = Pt(24)
+        name_run.font.size = Pt(14)
         name_run.bold = True
         name_run.font.name = '標楷體'
         name_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
@@ -672,7 +672,10 @@ def generate_word_student_schedule(data):
         table.style = 'Table Grid'
         table.autofit = False
         
-        widths = [Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.2), Cm(1.5)]
+        # Original Widths: [Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.2), Cm(1.5)]
+        # New Requirement: Time=1.5, Per=1.5
+        # Remaining width approx 18.5 - 3.0 = 15.5cm. 15.5/5 = 3.1cm per day
+        widths = [Cm(3.1), Cm(3.1), Cm(3.1), Cm(3.1), Cm(3.1), Cm(1.5), Cm(1.5)]
         
         hdr_cells = table.add_row().cells
         headers = ["星期五", "星期四", "星期三", "星期二", "星期一", "時間", "節次"]
@@ -713,7 +716,8 @@ def generate_word_student_schedule(data):
                 cell = cells[i]
                 # Clear existing paragraphs
                 cell._element.clear_content()
-
+                
+                # Check previous logic for split usage
                 if content.strip():
                     parts = content.split('\n')
                     
