@@ -711,25 +711,74 @@ def generate_word_student_schedule(data):
                 content = content.replace('<br>', '\n').replace('&nbsp;', ' ')
                 
                 cell = cells[i]
-                cell.text = content
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if p.runs:
-                    run = p.runs[0]
-                    run.font.size = Pt(11) 
-                    run.font.name = '標楷體'
-                    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-            
+                # Clear existing paragraphs
+                cell._element.clear_content()
+
+                if content.strip():
+                    parts = content.split('\n')
+                    
+                    # 1. Subject (Large, Bold)
+                    if len(parts) > 0 and parts[0].strip():
+                        p = cell.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(parts[0].strip())
+                        run.bold = True
+                        run.font.size = Pt(16)
+                        run.font.name = '標楷體'
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                    
+                    # 2. Teacher (Small)
+                    if len(parts) > 1 and parts[1].strip():
+                        p = cell.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(parts[1].strip())
+                        run.font.size = Pt(10)
+                        run.font.name = '標楷體'
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+
+                    # 3. Room (Small)
+                    if len(parts) > 2 and parts[2].strip():
+                        p = cell.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = p.add_run(parts[2].strip())
+                        run.font.size = Pt(10)
+                        run.font.name = '標楷體'
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                else:
+                    # Empty cell
+                    cell.add_paragraph('')
+
             # Time
-            time_str = row_data.get('time', '').replace('~', '\n|\n')
-            cells[5].text = time_str
-            p = cells[5].paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
+            time_raw = row_data.get('time', '')
+            if '~' in time_raw:
+                t_parts = time_raw.split('~')
+                cells[5].text = "" # Clear
+                p = cells[5].paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # Start Time
+                run = p.add_run(t_parts[0])
+                run.font.size = Pt(11)
+                run.font.name = 'Times New Roman'
+                
+                # Pipe
+                p.add_run('\n|\n')
+                
+                # End Time
+                run = p.add_run(t_parts[1])
+                run.font.size = Pt(11)
+                run.font.name = 'Times New Roman'
+            else:
+                cells[5].text = time_raw
+                p = cells[5].paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
             # Section
             cells[6].text = row_data.get('name', '')
             p = cells[6].paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if p.runs:
+                p.runs[0].font.size = Pt(12)
             
             for cell in cells:
                 tc = cell._tc
