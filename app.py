@@ -443,7 +443,9 @@ def generate_word_teacher_schedule(data):
         table.style = 'Table Grid'
         table.autofit = False
         
-        widths = [Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.2), Cm(1.5)]
+        # New Requirement: Time=1.5, Per=1.5
+        # Remaining width approx 18.5 - 3.0 = 15.5cm. 15.5/5 = 3.1cm per day
+        widths = [Cm(3.1), Cm(3.1), Cm(3.1), Cm(3.1), Cm(3.1), Cm(1.5), Cm(1.5)]
         
         hdr_cells = table.add_row().cells
         headers = ["星期五", "星期四", "星期三", "星期二", "星期一", "時間", "節次"]
@@ -467,6 +469,10 @@ def generate_word_teacher_schedule(data):
         for row_data in rows:
             row = table.add_row()
             cells = row.cells
+            
+            # Enforce column widths for every row
+            for ck, width in enumerate(widths):
+                cells[ck].width = width
             
             tr = row._tr
             trPr = tr.get_or_add_trPr()
