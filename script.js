@@ -3110,6 +3110,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return map[num] || num;
         };
 
+        const scheduleTitle = {
+            prefix: document.getElementById('title-prefix')?.value || '',
+            year: document.getElementById('title-year')?.value || '',
+            semester: document.getElementById('title-semester')?.value || ''
+        };
+
         validStudents.forEach(student => {
             const semesterChinese = toChineseNum(scheduleTitle.semester);
             const titleHeader = `新北市立江翠國中特教班 ${scheduleTitle.year} 學年度第${semesterChinese}學期課表`;
@@ -3257,8 +3263,26 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (!course) continue;
                                 course.groups.forEach(groupName => {
                                     // Check for override first
-                                    const overrideStudents = slotOverrides[slotKey]?.[course.id]?.[groupName];
-                                    const groupStudents = overrideStudents || assignments[course.id]?.[groupName] || [];
+                                    const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
+                                    let groupStudents = assignments[course.id]?.[groupName] || [];
+
+                                    if (override) {
+                                        if (Array.isArray(override)) {
+                                            // Legacy: Absolute list
+                                            groupStudents = override;
+                                        } else if (override.type === 'delta') {
+                                            // Delta: Apply changes
+                                            // 1. Filter out removed
+                                            groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
+                                            // 2. Add added (avoid duplicates)
+                                            override.added.forEach(sid => {
+                                                if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                                            });
+                                        }
+                                    }
+
+                                    // Ensure it is an array
+                                    if (!Array.isArray(groupStudents)) groupStudents = [];
 
                                     if (groupStudents.includes(student.id)) {
                                         found = true;
@@ -3337,10 +3361,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!course) return;
                 course.groups.forEach(groupName => {
                     // Check for override first
-                    const overrideStudents = slotOverrides[slotKey]?.[course.id]?.[groupName];
-                    const groupStudents = overrideStudents || assignments[course.id]?.[groupName] || [];
+                    // Check for override first
+                    const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
+                    let groupStudents = assignments[course.id]?.[groupName] || [];
 
-                    if (groupStudents.includes(student.id)) {
+                    if (override) {
+                        if (Array.isArray(override)) {
+                            // Legacy: Absolute list
+                            groupStudents = override;
+                        } else if (override.type === 'delta') {
+                            // Delta: Apply changes
+                            // 1. Filter out removed
+                            groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
+                            // 2. Add added (avoid duplicates)
+                            override.added.forEach(sid => {
+                                if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                            });
+                        }
+                    }
+
+                    // Ensure it is an array
+                    if (!Array.isArray(groupStudents)) groupStudents = [];
+
+                    if (groupStudents.some(id => String(id) === String(student.id))) {
                         const details = course.groupDetails[groupName];
                         const teacherDisplay = Array.isArray(details.teacher) ? details.teacher.join(', ') : (details.teacher || '未排');
                         studentBlocks.push(`
@@ -3737,6 +3780,12 @@ document.addEventListener('DOMContentLoaded', () => {
             { key: 'tuesday', name: '星期二' },
             { key: 'monday', name: '星期一' }
         ];
+
+        const scheduleTitle = {
+            prefix: document.getElementById('title-prefix')?.value || '',
+            year: document.getElementById('title-year')?.value || '',
+            semester: document.getElementById('title-semester')?.value || ''
+        };
 
         const timeSlots = getCommonTimeSlots();
         const today = new Date();
@@ -4709,8 +4758,27 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (!course) continue;
 
                                     course.groups.forEach(groupName => {
-                                        const overrideStudents = slotOverrides[slotKey]?.[course.id]?.[groupName];
-                                        const groupStudents = overrideStudents || assignments[course.id]?.[groupName] || [];
+                                        // Check for override
+                                        const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
+                                        let groupStudents = assignments[course.id]?.[groupName] || [];
+
+                                        if (override) {
+                                            if (Array.isArray(override)) {
+                                                // Legacy: Absolute list
+                                                groupStudents = override;
+                                            } else if (override.type === 'delta') {
+                                                // Delta: Apply changes
+                                                // 1. Filter out removed
+                                                groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
+                                                // 2. Add added (avoid duplicates)
+                                                override.added.forEach(sid => {
+                                                    if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                                                });
+                                            }
+                                        }
+
+                                        // Ensure it is an array
+                                        if (!Array.isArray(groupStudents)) groupStudents = [];
 
                                         if (groupStudents.includes(student.id)) {
                                             const details = course.groupDetails[groupName];
@@ -4767,6 +4835,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Bind buttons
+    // Bind buttons
     window.exportMasterScheduleWord = async function () {
         const btn = document.getElementById('btn-export-master-schedule-word');
         const originalText = btn.textContent;
@@ -4775,13 +4844,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const scheduleType = document.getElementById('schedule-type-select').value;
+            console.log('Exporting schedule type:', scheduleType);
 
-            // 檢查是否為不支援Word匯出的課表類型
+            // 1. Check for unsupported types (Master, Classroom Integrated, Classroom)
             if (scheduleType === 'master' || scheduleType === 'classroom_integrated' || scheduleType === 'classroom') {
                 alert('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
                 return;
             }
 
+            // 2. Delegate to specific functions for supported types
             if (scheduleType === 'teacher') {
                 await window.exportTeacherScheduleWord(btn);
                 return;
@@ -4790,137 +4861,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Fallback for Master / Classroom Integrated
-            const isClassroomIntegrated = scheduleType === 'classroom_integrated';
-
-            // 1. Title
-            const prefix = document.getElementById('title-prefix').value || '';
-            const year = document.getElementById('title-year').value || '';
-            const semester = document.getElementById('title-semester').value || '';
-            const titleSuffix = isClassroomIntegrated ? '教室統整課表' : '總課表';
-            const title = `${prefix} ${year}學年度第${semester}學期 ${titleSuffix}`;
-
-            // 2. Data Gathering
-            // ... (Rest of Master Schedule Logic) ...
-            const timeSlots = [
-                { period: 'morning', name: '早自習', time: '', isSpecial: true },
-                { period: '1', name: '第一節', time: '08:30~09:15' },
-                { period: '2', name: '第二節', time: '09:25~10:10' },
-                { period: '3', name: '第三節', time: '10:20~11:05' },
-                { period: '4', name: '第四節', time: '11:15~12:00' },
-                { period: 'lunch', name: '午休', time: '12:30~13:10', isSpecial: true },
-                { period: '5', name: '第五節', time: '13:20~14:05' },
-                { period: '6', name: '第六節', time: '14:15~15:00' },
-                { period: '7', name: '第七節', time: '15:20~16:05' }
-            ];
-
-            // Fri -> Mon Order for Print/Word Layout
-            const weekdaysPrint = [
-                { key: 'friday', name: '星期五' },
-                { key: 'thursday', name: '星期四' },
-                { key: 'wednesday', name: '星期三' },
-                { key: 'tuesday', name: '星期二' },
-                { key: 'monday', name: '星期一' }
-            ];
-
-            const rowsPayload = timeSlots.map(slot => {
-                const row = {
-                    name: slot.name,
-                    time: slot.time,
-                    is_special: slot.isSpecial || false,
-                    days: {}
-                };
-
-                if (!slot.isSpecial) {
-                    weekdaysPrint.forEach(day => {
-                        const slotKey = `${day.key}-${slot.period}`;
-                        const blocks = scheduleData[slotKey] || [];
-                        const cellBlocks = [];
-
-                        // 1. Gather Blocks
-                        let renderItems = [];
-                        if (blocks && Array.isArray(blocks)) {
-                            blocks.forEach(block => {
-                                const course = courses.find(c => c.id === block.courseId);
-                                if (course && course.groups) {
-                                    course.groups.forEach(groupName => {
-                                        renderItems.push({ course, groupName });
-                                    });
-                                }
-                            });
-                        }
-
-                        // 2. Sort (Disabled to match PDF layout ordering)
-                        renderItems.sort((a, b) => a.groupName.localeCompare(b.groupName, 'zh-TW'));
-
-                        // 3. Extract Info
-                        renderItems.forEach(item => {
-                            const { course, groupName } = item;
-                            const details = course.groupDetails[groupName];
-                            if (!details) return;
-
-                            // Teacher
-                            let teacherDisplay = '未排';
-                            if (Array.isArray(details.teacher)) {
-                                teacherDisplay = details.teacher.filter(t => t).join('、') || '未排';
-                            } else if (details.teacher) {
-                                teacherDisplay = details.teacher;
-                            }
-
-                            // Students
-                            let studentNames = [];
-                            if (!isClassroomIntegrated) {
-                                let groupStudents = assignments[course.id]?.[groupName] || [];
-                                const override = slotOverrides[slotKey]?.[course.id]?.[groupName];
-                                if (override) {
-                                    if (Array.isArray(override)) groupStudents = override;
-                                    else if (override.type === 'delta') {
-                                        groupStudents = groupStudents.filter(sid => !override.removed.includes(sid));
-                                        override.added.forEach(sid => { if (!groupStudents.includes(sid)) groupStudents.push(sid); });
-                                    }
-                                }
-                                studentNames = groupStudents.map(sid => {
-                                    const s = students.find(st => st.id === sid);
-                                    return s ? `${s.grade} ${s.name}` : ''; // Format: Grade Name
-                                }).filter(n => n);
-                            }
-
-                            cellBlocks.push({
-                                course_name: course.name,
-                                group_name: groupName,
-                                teacher: teacherDisplay,
-                                room: details.room || '待訂',
-                                students: studentNames
-                            });
-                        });
-
-                        row.days[day.key] = cellBlocks;
-                    });
-                }
-                return row;
-            });
-
-            // 3. Send
-            const response = await fetch('/api/export/word/master', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: title,
-                    rows: rowsPayload
-                })
-            });
-
-            if (!response.ok) throw new Error('Export failed');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `master_schedule.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
+            // Should not reach here if valid type selected
+            console.warn('Unknown schedule type for export:', scheduleType);
 
         } catch (e) {
             console.error(e);
@@ -4931,7 +4873,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Word Export Button Logic
+
     const btnExportMasterScheduleWord = document.getElementById('btn-export-master-schedule-word');
     if (btnExportMasterScheduleWord) {
         btnExportMasterScheduleWord.addEventListener('click', window.exportMasterScheduleWord);

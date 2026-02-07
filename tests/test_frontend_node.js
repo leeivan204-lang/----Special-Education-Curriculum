@@ -106,7 +106,7 @@ global.alert = console.log;
 global.confirm = () => true;
 
 // --- Load script.js ---
-const scriptPath = path.join(__dirname, 'script.js');
+const scriptPath = path.join(__dirname, '../script.js');
 const scriptContent = fs.readFileSync(scriptPath, 'utf8');
 
 console.log("Loading script.js...");

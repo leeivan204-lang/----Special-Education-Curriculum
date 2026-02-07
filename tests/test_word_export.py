@@ -9,7 +9,7 @@ from io import BytesIO
 try:
     from app import generate_word_schedule, generate_word_teacher_schedule, generate_word_student_schedule
 except ImportError:
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from app import generate_word_schedule, generate_word_teacher_schedule, generate_word_student_schedule
 
 class TestWordExport(unittest.TestCase):
