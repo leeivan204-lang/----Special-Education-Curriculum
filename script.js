@@ -4563,6 +4563,138 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    window.exportStudentScheduleWord = async function (targetBtn = null) {
+        const btn = targetBtn || document.getElementById('btn-export-student-word');
+        // If called from master schedule, btn might be passed.
+        if (!btn) {
+            console.error('Export button not found');
+            return;
+        }
+
+        const originalText = btn.textContent;
+        btn.textContent = '⏳ 處理中...';
+        btn.disabled = true;
+
+        try {
+            // 1. Title Info
+            const prefix = document.getElementById('title-prefix').value || '';
+            const year = document.getElementById('title-year').value || '';
+            const semester = document.getElementById('title-semester').value || '';
+            const semesterChinese = { '1': '一', '2': '二', '3': '三' }[semester] || semester;
+
+            const title = `新北市立江翠國中特教班 ${year} 學年度第${semesterChinese}學期課表`;
+
+            // 2. Filter Students
+            const validStudents = students.filter(s => s && s.name);
+            if (validStudents.length === 0) {
+                alert('無學生資料可匯出');
+                return;
+            }
+
+            // 3. Build Payload
+            const timeSlots = [
+                { period: '1', name: '1', time: '08:30~09:15' },
+                { period: '2', name: '2', time: '09:25~10:10' },
+                { period: '3', name: '3', time: '10:20~11:05' },
+                { period: '4', name: '4', time: '11:15~12:00' },
+                { period: '5', name: '5', time: '13:20~14:05' },
+                { period: '6', name: '6', time: '14:15~15:00' },
+                { period: '7', name: '7', time: '15:20~16:05' }
+            ];
+            // Print layout is Fri -> Mon
+            const weekdaysPrint = [
+                { key: 'friday', name: '五' },
+                { key: 'thursday', name: '四' },
+                { key: 'wednesday', name: '三' },
+                { key: 'tuesday', name: '二' },
+                { key: 'monday', name: '一' }
+            ];
+
+            const studentsPayload = validStudents.map(student => {
+                const scheduleRows = timeSlots.map(slot => {
+                    const row = {
+                        period: slot.period,
+                        name: slot.name,
+                        time: slot.time,
+                        days: {}
+                    };
+
+                    weekdaysPrint.forEach(day => {
+                        const slotKey = `${day.key}-${slot.period}`;
+
+                        // Logic derived from generateStudentSchedules
+                        let manualEntry = studentManualEntries[student.id]?.[slotKey];
+                        let cellContent = '';
+
+                        if (manualEntry) {
+                            if (typeof manualEntry === 'string') manualEntry = { course: manualEntry, teacher: '', room: '' };
+                            // Format: Subject \n Teacher \n Room
+                            cellContent = `${manualEntry.course || ''}\n${manualEntry.teacher || ''}\n${manualEntry.room || ''}`;
+                        } else {
+                            const blocks = scheduleData[slotKey];
+                            if (blocks && Array.isArray(blocks)) {
+                                for (const block of blocks) {
+                                    const course = courses.find(c => c.id === block.courseId);
+                                    if (!course) continue;
+
+                                    course.groups.forEach(groupName => {
+                                        const overrideStudents = slotOverrides[slotKey]?.[course.id]?.[groupName];
+                                        const groupStudents = overrideStudents || assignments[course.id]?.[groupName] || [];
+
+                                        if (groupStudents.includes(student.id)) {
+                                            const details = course.groupDetails[groupName];
+                                            const teacherDisplay = Array.isArray(details.teacher) ? details.teacher.join('、') : (details.teacher || '');
+                                            // Format: Subject \n Teacher \n Room
+                                            cellContent = `${course.name}\n${teacherDisplay}\n${details.room || ''}`;
+                                        }
+                                    });
+                                    if (cellContent) break; // Found applicable course
+                                }
+                            }
+                        }
+                        row.days[day.key] = cellContent.trim();
+                    });
+                    return row;
+                });
+
+                return {
+                    name: student.name,
+                    grade: student.grade, // Optional context
+                    schedule_rows: scheduleRows
+                };
+            });
+
+            // 4. Send API Request
+            const response = await fetch('/api/export/word/student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: title,
+                    students: studentsPayload
+                })
+            });
+
+            if (!response.ok) throw new Error('Export failed');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `student_schedules.docx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+        } catch (e) {
+            console.error(e);
+            alert('匯出失敗: ' + e.message);
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    };
+
     // Bind buttons
     window.exportMasterScheduleWord = async function () {
         const btn = document.getElementById('btn-export-master-schedule-word');
@@ -4574,22 +4706,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const scheduleType = document.getElementById('schedule-type-select').value;
 
             if (scheduleType === 'teacher') {
-                // Delegate to existing teacher export logic
-                // But we need to make sure the teacher export function matches the button behavior
-                // Actually, exportTeacherScheduleWord uses its own button ID usually. 
-                // Let's call it directly but we need to ensure IT uses the passed button or handles UI?
-                // The existing function `exportTeacherScheduleWord` selects `#btn-export-teacher-word`. 
-                // We should probably refactor or just copy logic? 
-                // Better: Modify `exportTeacherScheduleWord` to accept a button element or just use a shared logic.
-                // For now, let's just call the logic directly here or call the function? 
-                // `exportTeacherScheduleWord` is attached to window. 
-                // However, it hardcodes the button ID. 
-                // Let's implement the specific dispatcher here.
-
                 await window.exportTeacherScheduleWord(btn);
                 return;
             } else if (scheduleType === 'classroom') {
                 await window.exportClassroomScheduleWord(btn);
+                return;
+            } else if (scheduleType === 'student') {
+                await window.exportStudentScheduleWord(btn);
                 return;
             }
 

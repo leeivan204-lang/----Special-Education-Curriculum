@@ -613,6 +613,136 @@ def export_word():
         print(f"Error generating Word: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/export/word/student', methods=['POST'])
+def export_word_student():
+    try:
+        data = request.json
+        print("Generating Student Word...")
+        file_stream = generate_word_student_schedule(data)
+        return send_file(
+            file_stream, 
+            as_attachment=True, 
+            download_name='student_schedules.docx', 
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+def generate_word_student_schedule(data):
+    document = Document()
+    
+    # Page Setup (A4 Portrait)
+    section = document.sections[0]
+    section.page_height = Cm(29.7)
+    section.page_width = Cm(21.0)
+    section.left_margin = Cm(1.27)
+    section.right_margin = Cm(1.27)
+    section.top_margin = Cm(1.27)
+    section.bottom_margin = Cm(1.27)
+
+    students_data = data.get('students', [])
+    title_text = data.get('title', '學生課表')
+    
+    for idx, student in enumerate(students_data):
+        if idx > 0:
+            document.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+
+        # Header Title
+        title_p = document.add_paragraph()
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = title_p.add_run(title_text)
+        run.bold = True
+        run.font.size = Pt(20)
+        run.font.name = '標楷體'
+        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+
+        # Student Name
+        name_p = document.add_paragraph()
+        name_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        name_run = name_p.add_run(f"{student['name']}")
+        name_run.font.size = Pt(24)
+        name_run.bold = True
+        name_run.font.name = '標楷體'
+        name_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+        
+        # Table
+        # Cols: Fri, Thu, Wed, Tue, Mon, Time, Per
+        table = document.add_table(rows=0, cols=7)
+        table.style = 'Table Grid'
+        table.autofit = False
+        
+        widths = [Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.95), Cm(2.2), Cm(1.5)]
+        
+        hdr_cells = table.add_row().cells
+        headers = ["星期五", "星期四", "星期三", "星期二", "星期一", "時間", "節次"]
+        for i, text in enumerate(headers):
+            cell = hdr_cells[i]
+            cell.width = widths[i]
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(12)
+            run.font.name = '標楷體'
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            vAlign = OxmlElement('w:vAlign')
+            vAlign.set(qn('w:val'), 'center')
+            tcPr.append(vAlign)
+
+        rows = student.get('schedule_rows', [])
+        for row_data in rows:
+            row = table.add_row()
+            cells = row.cells
+            
+            # Row Height
+            tr = row._tr
+            trPr = tr.get_or_add_trPr()
+            trHeight = OxmlElement('w:trHeight')
+            trHeight.set(qn('w:val'), '1300') # Matches approx 50-60px height
+            trPr.append(trHeight)
+
+            day_map = {0: 'friday', 1: 'thursday', 2: 'wednesday', 3: 'tuesday', 4: 'monday'}
+            for i in range(5):
+                day_key = day_map[i]
+                content = row_data['days'].get(day_key, '')
+                content = content.replace('<br>', '\n').replace('&nbsp;', ' ')
+                
+                cell = cells[i]
+                cell.text = content
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                if p.runs:
+                    run = p.runs[0]
+                    run.font.size = Pt(11) 
+                    run.font.name = '標楷體'
+                    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            
+            # Time
+            time_str = row_data.get('time', '').replace('~', '\n|\n')
+            cells[5].text = time_str
+            p = cells[5].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Section
+            cells[6].text = row_data.get('name', '')
+            p = cells[6].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            for cell in cells:
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                vAlign = OxmlElement('w:vAlign')
+                vAlign.set(qn('w:val'), 'center')
+                tcPr.append(vAlign)
+
+    f = BytesIO()
+    document.save(f)
+    f.seek(0)
+    return f
+
 if __name__ == '__main__':
     print(f"Server is running at http://localhost:{PORT}")
     print(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
