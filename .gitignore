@@ -53,3 +53,5 @@ index.css.bak*
 *.broken
 *.corrupted
 data.js
+logs/
+!logs/.gitkeep

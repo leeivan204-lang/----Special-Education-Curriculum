@@ -41,7 +41,7 @@ class TestWordExport(unittest.TestCase):
                 {
                     'name': '王老師',
                     'stats_text': '總時數：10',
-                    'stats_table': {'total': 10, 'base': 10, 'part_time': 0, 'overtime': 0},
+                    'stats_table': {'total': 10, 'base': 10, 'part_time': 0, 'overtime': 0, 'note': '(每週需搭車往返中心上課)'},
                     'schedule_rows': [
                         {
                             'period': '1', 'time': '08:00~08:50',
@@ -180,6 +180,35 @@ class TestWordExport(unittest.TestCase):
         # python-docx doesn't easily expose trHeight reading without Oxml inspection.
         # We can skip exact height validation or use Oxml if critical.
         # For now, let's assume if function runs without error using the code we saw, it works.
+
+    def test_teacher_note_newline(self):
+        """測試教師課表基本鐘點備註換行功能"""
+        stream = generate_word_teacher_schedule(self.mock_teacher_data)
+        doc = Document(stream)
+        
+        # 找到統計資料表格（應該是第二個表格，第一個是課表）
+        self.assertTrue(len(doc.tables) >= 2, "應該至少有兩個表格（課表和統計）")
+        stats_table = doc.tables[1]
+        
+        # 統計表格應該有4列（總時數、基本鐘點、兼課、超鐘點）
+        row = stats_table.rows[0]
+        self.assertEqual(len(row.cells), 4, "統計表格應該有4欄")
+        
+        # 基本鐘點在第二欄（index 1）
+        base_cell = row.cells[1]
+        
+        # 檢查這個儲存格有多個段落（表示有換行）
+        paragraphs = base_cell.paragraphs
+        self.assertGreaterEqual(len(paragraphs), 2, "基本鐘點儲存格應該至少有兩個段落（鐘點數和備註）")
+        
+        # 第一段應該包含基本鐘點數
+        self.assertIn("基本鐘點", paragraphs[0].text)
+        self.assertIn("10", paragraphs[0].text)
+        self.assertIn("節", paragraphs[0].text)
+        
+        # 第二段應該只包含備註
+        self.assertEqual(paragraphs[1].text.strip(), "(每週需搭車往返中心上課)")
+
 
 if __name__ == '__main__':
     unittest.main()

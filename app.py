@@ -569,12 +569,30 @@ def generate_word_teacher_schedule(data):
         
         for i, text in enumerate(items):
             cell = row.cells[i]
-            cell.text = text
-            p = cell.paragraphs[0]
-            run = p.runs[0]
-            run.font.size = Pt(12)
-            run.font.name = '標楷體'
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            
+            # 特別處理"基本鐘點"欄位，讓備註換行
+            if i == 1 and stats.get('note', ''):  # i==1 是基本鐘點欄位
+                cell.text = ""  # 先清空
+                # 第一行：基本鐘點數
+                p = cell.paragraphs[0]
+                run = p.add_run(f"基本鐘點：{stats.get('base', 0)} 節")
+                run.font.size = Pt(12)
+                run.font.name = '標楷體'
+                run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                
+                # 第二行：備註
+                p2 = cell.add_paragraph()
+                run2 = p2.add_run(stats.get('note', ''))
+                run2.font.size = Pt(12)
+                run2.font.name = '標楷體'
+                run2._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            else:
+                cell.text = text
+                p = cell.paragraphs[0]
+                run = p.runs[0]
+                run.font.size = Pt(12)
+                run.font.name = '標楷體'
+                run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
 
     f = BytesIO()
