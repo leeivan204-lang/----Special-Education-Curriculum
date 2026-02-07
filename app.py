@@ -261,7 +261,7 @@ def generate_word_schedule(data):
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = title_p.add_run(title_text)
     run.bold = True
-    run.font.size = Pt(24)
+    run.font.size = Pt(18)
     run.font.name = '標楷體'
     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
@@ -426,7 +426,7 @@ def generate_word_teacher_schedule(data):
         title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = title_p.add_run(title_text)
         run.bold = True
-        run.font.size = Pt(22)
+        run.font.size = Pt(16)
         run.font.name = '標楷體'
         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
