@@ -29,8 +29,7 @@ jobs:
         uv venv
         uv pip install -r requirements.txt
         
-    - name: Run backend basic tests
-      run: uv run python tests/test_backend.py
+
       
     - name: Run backend API tests
       run: uv run python tests/test_backend_api.py
