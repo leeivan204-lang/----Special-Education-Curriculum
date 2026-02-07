@@ -4375,7 +4375,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 3. Send to Backend
-            const response = await fetch('/api/export/word', {
+            const response = await fetch(`${API_BASE}/export/word`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -4546,7 +4546,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 3. Send
-            const response = await fetch('/api/export/word/teacher', {
+            const response = await fetch(`${API_BASE}/export/word/teacher`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -4654,7 +4654,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 classroomsPayload.push({ name: room, schedule_rows: scheduleRows });
             });
 
-            const response = await fetch('/api/export/word/classroom', {
+            const response = await fetch(`${API_BASE}/export/word/classroom`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -4805,7 +4805,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 4. Send API Request
-            const response = await fetch('/api/export/word/student', {
+            const response = await fetch(`${API_BASE}/export/word/student`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
