@@ -2269,8 +2269,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Allow reordering within the same slot even if full
             const isReordering = !blockData.fromPool && blockData.originalSlotKey === slotKey;
 
-            if (!isReordering && scheduleData[slotKey].length >= 2) {
-                alert('該時段已滿，無法再加入課程！');
+            // Limit to 5 courses per slot (was 2)
+            if (!isReordering && scheduleData[slotKey].length >= 5) {
+                alert('該時段已滿，無法再加入課程！(上限 5 堂)');
                 return;
             }
 
@@ -4908,7 +4909,31 @@ document.addEventListener('DOMContentLoaded', () => {
             get CURRENT_USER() { return CURRENT_USER; },
             set CURRENT_USER(val) { CURRENT_USER = val; },
             get LAST_SYNCED_TIMESTAMP() { return LAST_SYNCED_TIMESTAMP; },
-            set LAST_SYNCED_TIMESTAMP(val) { LAST_SYNCED_TIMESTAMP = val; }
+            set LAST_SYNCED_TIMESTAMP(val) { LAST_SYNCED_TIMESTAMP = val; },
+            get teachers() { return teachers; },
+            set teachers(val) { teachers = val; },
+            get assignments() { return assignments; },
+            set assignments(val) { assignments = val; },
+            // Exposed Functions for Testing
+            handleSaveCourse,
+            handleSaveStudent,
+            handleSaveTeacher,
+            openAddCourseModal,
+            openAddStudentModal,
+            openAddTeacherModal,
+            renderCourseList,
+            renderStudentList,
+            renderTeacherList,
+            renderGroupingWorkspace,
+            renderAllGroupsOverview,
+            handleZoneDrop,
+            renderMasterSchedule,
+            renderCourseBlocks,
+            handleScheduleDrop,
+            deleteCourse: window.deleteCourse, // These are attached to window
+            deleteStudent: window.deleteStudent,
+            deleteTeacher: window.deleteTeacher,
+            removeFromSchedule: window.removeFromSchedule
         };
     }
 });
