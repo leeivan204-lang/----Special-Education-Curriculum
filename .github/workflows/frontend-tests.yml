@@ -1,0 +1,47 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: |
+        # 前端測試不需要額外依賴，直接使用 Node.js 內建模組
+        echo "Frontend tests use built-in Node.js modules"
+        
+    - name: Run frontend data management tests
+      run: node tests/test_frontend_data.js
+      
+    - name: Run frontend grouping tests
+      run: node tests/test_frontend_grouping.js
+      
+    - name: Run frontend scheduling tests
+      run: node tests/test_frontend_scheduling.js
+      
+    - name: Run frontend node tests
+      run: node tests/test_frontend_node.js
+      
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "✅ Frontend tests completed"
+        echo "Tests executed:"
+        echo "  - Data Management"
+        echo "  - Grouping Management"
+        echo "  - Scheduling Logic"
+        echo "  - Data Synchronization"

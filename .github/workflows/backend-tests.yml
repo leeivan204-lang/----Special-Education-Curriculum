@@ -1,0 +1,51 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        
+    - name: Install dependencies
+      run: |
+        uv pip install -r requirements.txt
+        
+    - name: Run backend basic tests
+      run: uv run python tests/test_backend.py
+      
+    - name: Run backend API tests
+      run: uv run python tests/test_backend_api.py
+      
+    - name: Run backend export tests
+      run: uv run python tests/test_backend_export.py
+      
+    - name: Run Word export tests
+      run: uv run python tests/test_word_export.py
+      
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "✅ Backend tests completed"
+        echo "Tests executed:"
+        echo "  - Basic Functionality (Login, Save, Load)"
+        echo "  - API Endpoints"
+        echo "  - Export Functionality"
+        echo "  - Word Export Details"
