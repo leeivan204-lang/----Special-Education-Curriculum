@@ -1,0 +1,383 @@
+{
+    "students": [
+        {
+            "id": 1001,
+            "name": "張小明",
+            "grade": "7"
+        },
+        {
+            "id": 1002,
+            "name": "李小華",
+            "grade": "7"
+        },
+        {
+            "id": 1003,
+            "name": "王大同",
+            "grade": "8"
+        },
+        {
+            "id": 1004,
+            "name": "陳美玲",
+            "grade": "8"
+        },
+        {
+            "id": 1005,
+            "name": "林志明",
+            "grade": "9"
+        },
+        {
+            "id": 1006,
+            "name": "黃雅婷",
+            "grade": "9"
+        }
+    ],
+    "courses": [
+        {
+            "id": 101,
+            "name": "國文",
+            "groups": 2,
+            "hoursPerWeek": 5,
+            "groupInfo": {
+                "Group A": {
+                    "teacher": "王老師",
+                    "classroom": "101教室"
+                },
+                "Group B": {
+                    "teacher": "李老師",
+                    "classroom": "102教室"
+                }
+            }
+        },
+        {
+            "id": 102,
+            "name": "數學",
+            "groups": 2,
+            "hoursPerWeek": 4,
+            "groupInfo": {
+                "Group A": {
+                    "teacher": "陳老師",
+                    "classroom": "201教室"
+                },
+                "Group B": {
+                    "teacher": "林老師",
+                    "classroom": "202教室"
+                }
+            }
+        },
+        {
+            "id": 103,
+            "name": "生活管理",
+            "groups": 3,
+            "hoursPerWeek": 3,
+            "groupInfo": {
+                "Group A": {
+                    "teacher": "張老師",
+                    "classroom": "301教室"
+                },
+                "Group B": {
+                    "teacher": "劉老師",
+                    "classroom": "302教室"
+                },
+                "Group C": {
+                    "teacher": "吳老師",
+                    "classroom": "303教室"
+                }
+            }
+        },
+        {
+            "id": 104,
+            "name": "職業教育",
+            "groups": 2,
+            "hoursPerWeek": 4,
+            "groupInfo": {
+                "Group A": {
+                    "teacher": "周老師",
+                    "classroom": "烘焙教室"
+                },
+                "Group B": {
+                    "teacher": "鄭老師",
+                    "classroom": "手作教室"
+                }
+            }
+        },
+        {
+            "id": 105,
+            "name": "體育",
+            "groups": 1,
+            "hoursPerWeek": 2,
+            "groupInfo": {
+                "Group A": {
+                    "teacher": "趙老師",
+                    "classroom": "操場"
+                }
+            }
+        }
+    ],
+    "teachers": [
+        {
+            "id": 201,
+            "name": "王老師",
+            "baseHours": 16,
+            "notes": "導師"
+        },
+        {
+            "id": 202,
+            "name": "李老師",
+            "baseHours": 18,
+            "notes": ""
+        },
+        {
+            "id": 203,
+            "name": "陳老師",
+            "baseHours": 16,
+            "notes": "特教組長"
+        },
+        {
+            "id": 204,
+            "name": "林老師",
+            "baseHours": 18,
+            "notes": ""
+        },
+        {
+            "id": 205,
+            "name": "張老師",
+            "baseHours": 16,
+            "notes": ""
+        },
+        {
+            "id": 206,
+            "name": "劉老師",
+            "baseHours": 16,
+            "notes": ""
+        },
+        {
+            "id": 207,
+            "name": "吳老師",
+            "baseHours": 18,
+            "notes": ""
+        },
+        {
+            "id": 208,
+            "name": "周老師",
+            "baseHours": 16,
+            "notes": "職業教育專長"
+        },
+        {
+            "id": 209,
+            "name": "鄭老師",
+            "baseHours": 16,
+            "notes": ""
+        },
+        {
+            "id": 210,
+            "name": "趙老師",
+            "baseHours": 18,
+            "notes": "體育專長"
+        }
+    ],
+    "groupAssignments": {
+        "101": {
+            "Group A": [
+                1001,
+                1003,
+                1005
+            ],
+            "Group B": [
+                1002,
+                1004,
+                1006
+            ]
+        },
+        "102": {
+            "Group A": [
+                1001,
+                1002
+            ],
+            "Group B": [
+                1003,
+                1004,
+                1005,
+                1006
+            ]
+        },
+        "103": {
+            "Group A": [
+                1001,
+                1002
+            ],
+            "Group B": [
+                1003,
+                1004
+            ],
+            "Group C": [
+                1005,
+                1006
+            ]
+        },
+        "104": {
+            "Group A": [
+                1001,
+                1003,
+                1005
+            ],
+            "Group B": [
+                1002,
+                1004,
+                1006
+            ]
+        },
+        "105": {
+            "Group A": [
+                1001,
+                1002,
+                1003,
+                1004,
+                1005,
+                1006
+            ]
+        }
+    },
+    "schedule": {
+        "monday-1": [
+            {
+                "courseId": 101,
+                "groupId": "Group A"
+            }
+        ],
+        "monday-2": [
+            {
+                "courseId": 101,
+                "groupId": "Group B"
+            }
+        ],
+        "monday-3": [
+            {
+                "courseId": 103,
+                "groupId": "Group A"
+            }
+        ],
+        "monday-4": [
+            {
+                "courseId": 104,
+                "groupId": "Group A"
+            }
+        ],
+        "monday-5": [
+            {
+                "courseId": 105,
+                "groupId": "Group A"
+            }
+        ],
+        "tuesday-1": [
+            {
+                "courseId": 102,
+                "groupId": "Group A"
+            }
+        ],
+        "tuesday-2": [
+            {
+                "courseId": 102,
+                "groupId": "Group B"
+            }
+        ],
+        "tuesday-3": [
+            {
+                "courseId": 101,
+                "groupId": "Group A"
+            }
+        ],
+        "tuesday-4": [
+            {
+                "courseId": 103,
+                "groupId": "Group B"
+            }
+        ],
+        "tuesday-5": [
+            {
+                "courseId": 104,
+                "groupId": "Group B"
+            }
+        ],
+        "wednesday-1": [
+            {
+                "courseId": 101,
+                "groupId": "Group B"
+            }
+        ],
+        "wednesday-2": [
+            {
+                "courseId": 102,
+                "groupId": "Group A"
+            }
+        ],
+        "wednesday-3": [
+            {
+                "courseId": 103,
+                "groupId": "Group C"
+            }
+        ],
+        "wednesday-4": [
+            {
+                "courseId": 104,
+                "groupId": "Group A"
+            }
+        ],
+        "thursday-1": [
+            {
+                "courseId": 102,
+                "groupId": "Group B"
+            }
+        ],
+        "thursday-2": [
+            {
+                "courseId": 101,
+                "groupId": "Group A"
+            }
+        ],
+        "thursday-3": [
+            {
+                "courseId": 103,
+                "groupId": "Group B"
+            }
+        ],
+        "thursday-4": [
+            {
+                "courseId": 104,
+                "groupId": "Group B"
+            }
+        ],
+        "friday-1": [
+            {
+                "courseId": 101,
+                "groupId": "Group B"
+            }
+        ],
+        "friday-2": [
+            {
+                "courseId": 102,
+                "groupId": "Group A"
+            }
+        ],
+        "friday-3": [
+            {
+                "courseId": 103,
+                "groupId": "Group A"
+            }
+        ],
+        "friday-4": [
+            {
+                "courseId": 105,
+                "groupId": "Group A"
+            }
+        ]
+    },
+    "scheduleOverrides": {},
+    "scheduleTitle": {
+        "schoolName": "○○國中特教班",
+        "academicYear": "114",
+        "semester": "下學期",
+        "startDate": "2026-02-10",
+        "endDate": "2026-06-30"
+    },
+    "lastSyncedTimestamp": null
+}
