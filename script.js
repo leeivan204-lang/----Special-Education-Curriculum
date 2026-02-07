@@ -781,6 +781,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Export Groups CSV Button
+    const btnExportGroupsCSV = document.getElementById('btn-export-groups-csv');
+    if (btnExportGroupsCSV) {
+        btnExportGroupsCSV.addEventListener('click', exportGroupsCSV);
+    }
+
     // Clear Assignments Button
     if (btnClearAssignments) {
         btnClearAssignments.addEventListener('click', () => {
@@ -1842,6 +1848,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
         overviewContainer.innerHTML = html;
         overviewContainer.style.display = 'grid';
+    }
+
+    // 匯出分組資料為CSV
+    function exportGroupsCSV() {
+        if (courses.length === 0) {
+            alert('目前沒有課程資料可匯出');
+            return;
+        }
+
+        // CSV標題列
+        let csvContent = '課程分組,學生(年級)\n';
+
+        // 遍歷所有課程
+        courses.forEach(course => {
+            const courseAssignments = assignments[course.id] || {};
+
+            // 遍歷每個分組
+            course.groups.forEach(groupName => {
+                const studentIds = courseAssignments[groupName] || [];
+
+                // 取得該分組的學生資料
+                const groupStudents = studentIds
+                    .map(id => students.find(s => s.id === id))
+                    .filter(s => s);
+
+                // 按年級排序（高年級在前）
+                groupStudents.sort((a, b) => b.grade - a.grade);
+
+                // 組合學生列表：學生名(年級)、學生名(年級)...
+                const studentList = groupStudents.length > 0
+                    ? groupStudents.map(s => `${s.name}(${s.grade})`).join('、')
+                    : '';
+
+                // 組成CSV行：課程分組名,學生列表
+                const groupDisplayName = `${course.name}${groupName}`;
+                csvContent += `${groupDisplayName},${studentList}\n`;
+            });
+        });
+
+        // 建立Blob並下載（使用UTF-8 BOM以確保Excel正確顯示中文）
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+
+        // 檔案名稱包含日期時間
+        const dateStr = getFormattedDate();
+        a.download = `分組資料_${CURRENT_USER}_${dateStr}.csv`;
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     // --- Drag and Drop Handlers ---
