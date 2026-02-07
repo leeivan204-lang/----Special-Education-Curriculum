@@ -238,11 +238,20 @@ body {
 
 /* Empty State */
 .empty-state {
+    display: inline-block;
     text-align: center;
     padding: 1.5rem;
     color: #95a5a6;
     font-size: 1rem;
     line-height: 1.6;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Empty state wrapper to center the inline-block */
+#grouping-empty-state {
+    text-align: center;
+    width: 100%;
 }
 
 /* Course Management */
@@ -397,7 +406,7 @@ body {
 .grouping-workspace {
     display: flex;
     gap: 1.5rem;
-    height: calc(100vh - 250px);
+    height: calc(100vh - 400px);
 }
 
 .groups-columns-container {
