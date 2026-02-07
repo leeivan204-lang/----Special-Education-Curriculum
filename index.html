@@ -190,6 +190,11 @@
                             <option value="student">學生課表 (個別)</option>
                             <option value="classroom">教室課表 (個別)</option>
                         </select>
+
+                        <button id="btn-export-master-schedule-word" class="btn-primary"
+                            style="background-color: #2b579a;">
+                            📘 匯出 Word
+                        </button>
                         <button id="btn-export-master-schedule" class="btn-primary">
                             📄 匯出PDF / 列印
                         </button>
@@ -281,9 +286,15 @@
                         </div>
 
                         <!-- 匯出按鈕 -->
-                        <button class="btn-primary" id="btn-export-schedule">
-                            📄 匯出PDF / 列印
-                        </button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-primary" id="btn-export-schedule-word"
+                                style="background-color: #2b579a;">
+                                📘 匯出 Word
+                            </button>
+                            <button class="btn-primary" id="btn-export-schedule">
+                                📄 匯出PDF / 列印
+                            </button>
+                        </div>
                     </div>
                 </div>
 
