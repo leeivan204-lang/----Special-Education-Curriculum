@@ -700,6 +700,10 @@ def generate_word_student_schedule(data):
             row = table.add_row()
             cells = row.cells
             
+            # Enforce column widths for every row
+            for ck, width in enumerate(widths):
+                cells[ck].width = width
+
             # Row Height
             tr = row._tr
             trPr = tr.get_or_add_trPr()
