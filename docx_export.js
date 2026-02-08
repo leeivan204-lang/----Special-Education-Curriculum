@@ -204,7 +204,8 @@ window.generateWordTeacherScheduleJS = async function (data) {
         // Teacher Name
         children.push(new Paragraph({
             alignment: AlignmentType.LEFT,
-            children: [new TextRun({ text: `任課教師：${teacher.name} 老師`, font: "標楷體", size: 32 })] // 16pt
+            spacing: { before: 240, after: 240 }, // Add spacing
+            children: [new TextRun({ text: `任課教師：${teacher.name} 老師`, font: "標楷體", size: 28 })] // 14pt = 28
         }));
 
         // Table
@@ -236,6 +237,9 @@ window.generateWordTeacherScheduleJS = async function (data) {
                 dayMap.forEach((dayKey, idx) => {
                     let content = row.days[dayKey] || '';
                     content = content.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+                    // New requirement: Wrap (兼)
+                    content = content.replace(/\(兼\)/g, '\n(兼)');
+
                     trChildren.push(createCenteredCell(content, colWidths[idx], { fontSize: 12 }));
                 });
                 const timeStr = (row.time || '').replace('~', '\n|\n');
@@ -293,7 +297,7 @@ window.generateWordTeacherScheduleJS = async function (data) {
                 verticalAlign: VerticalAlign.CENTER,
                 children: [
                     new Paragraph({
-                        alignment: AlignmentType.LEFT,
+                        alignment: AlignmentType.CENTER, // Changed to CENTER
                         children: baseRuns
                     })
                 ]
