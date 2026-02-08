@@ -262,7 +262,7 @@ window.generateWordTeacherScheduleJS = async function (data) {
         if (data.date_range) {
             children.push(new Paragraph({
                 alignment: AlignmentType.RIGHT,
-                spacing: { before: 120 }, // 6pt
+                spacing: { before: 120, after: 240 }, // 6pt before, 12pt after
                 children: [new TextRun({ text: `實施日期 ${data.date_range}`, font: "Times New Roman", size: 24 })]
             }));
         }
@@ -271,6 +271,7 @@ window.generateWordTeacherScheduleJS = async function (data) {
         if (teacher.stats_text) {
             children.push(new Paragraph({
                 alignment: AlignmentType.LEFT,
+                spacing: { after: 240 }, // 12pt after
                 children: [new TextRun({ text: teacher.stats_text, font: "標楷體", size: 24 })]
             }));
         }
