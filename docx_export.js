@@ -132,10 +132,16 @@ window.generateWordScheduleJS = async function (data) {
             },
             children: [
                 new Paragraph({
-                    text: titleText,
-                    heading: HeadingLevel.TITLE,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Microsoft JhengHei", size: 40, bold: true } // 20pt * 2
+                    heading: HeadingLevel.TITLE,
+                    children: [
+                        new TextRun({
+                            text: titleText,
+                            font: "標楷體",
+                            size: 40, // 20pt
+                            bold: true
+                        })
+                    ]
                 }),
                 new Paragraph({ text: "" }),
                 new Table({
@@ -184,9 +190,15 @@ window.generateWordTeacherScheduleJS = async function (data) {
 
         // Title
         children.push(new Paragraph({
-            text: data.title || '特教班教師課表',
             alignment: AlignmentType.CENTER,
-            run: { font: "Microsoft JhengHei", size: 40, bold: true }
+            children: [
+                new TextRun({
+                    text: data.title || '特教班教師課表',
+                    font: "標楷體",
+                    size: 40,
+                    bold: true
+                })
+            ]
         }));
 
         // Teacher Name
@@ -263,25 +275,36 @@ window.generateWordTeacherScheduleJS = async function (data) {
         if (teacher.stats_table) {
             const stats = teacher.stats_table;
 
+            // Stats Table: 4 columns, equal width
+            // Total width ~18.46cm. Each col ~4.615cm -> ~2616 Twips
+            const colWidth = 2616;
+
             // Build Base Hours Cell Content
             const baseRuns = [
-                new TextRun({ text: `基本鐘點：${stats.base} 節`, font: "標楷體", size: 24 })
+                new TextRun({ text: `基本鐘點：${stats.base} 節`, font: "標楷體", size: 24, bold: false })
             ];
             if (stats.note) {
                 baseRuns.push(new TextRun({ text: "", break: 1 }));
-                baseRuns.push(new TextRun({ text: stats.note, font: "標楷體", size: 24 }));
+                baseRuns.push(new TextRun({ text: stats.note, font: "標楷體", size: 24, bold: false }));
             }
+
             const baseCell = new TableCell({
-                children: [new Paragraph({ alignment: AlignmentType.LEFT, children: baseRuns })],
+                width: { size: colWidth, type: WidthType.DXA },
                 verticalAlign: VerticalAlign.CENTER,
+                children: [
+                    new Paragraph({
+                        alignment: AlignmentType.LEFT,
+                        children: baseRuns
+                    })
+                ]
             });
 
             const statsRow = new TableRow({
                 children: [
-                    createCenteredCell(`總時數：${stats.total} 節`, 25, { widthPercent: 25, fontSize: 12 }),
+                    createCenteredCell(`總時數：${stats.total} 節`, colWidth, { fontSize: 12 }),
                     baseCell,
-                    createCenteredCell(`兼課：${stats.part_time} 節`, 25, { widthPercent: 25, fontSize: 12 }),
-                    createCenteredCell(`超鐘點：${stats.overtime}`, 25, { widthPercent: 25, fontSize: 12 }),
+                    createCenteredCell(`兼課：${stats.part_time} 節`, colWidth, { fontSize: 12 }),
+                    createCenteredCell(`超鐘點：${stats.overtime}`, colWidth, { fontSize: 12 }),
                 ]
             });
             children.push(new Table({
@@ -337,9 +360,15 @@ window.generateWordStudentScheduleJS = async function (data) {
 
         // Title
         children.push(new Paragraph({
-            text: data.title || '學生課表',
             alignment: AlignmentType.CENTER,
-            run: { font: "Microsoft JhengHei", size: 40, bold: true }
+            children: [
+                new TextRun({
+                    text: data.title || '學生課表',
+                    font: "標楷體",
+                    size: 40,
+                    bold: true
+                })
+            ]
         }));
 
         // Student Name
@@ -491,9 +520,15 @@ window.generateWordClassroomScheduleJS = async function (data) {
             },
             children: [
                 new Paragraph({
-                    text: `${data.title_prefix} ${room.name} 課表`,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Microsoft JhengHei", size: 40, bold: true }
+                    children: [
+                        new TextRun({
+                            text: `${data.title_prefix} ${room.name} 課表`,
+                            font: "標楷體",
+                            size: 40,
+                            bold: true
+                        })
+                    ]
                 }),
                 new Paragraph({
                     text: `製表日期: ${data.date_created}`,
