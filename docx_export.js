@@ -135,7 +135,7 @@ window.generateWordScheduleJS = async function (data) {
                     text: titleText,
                     heading: HeadingLevel.TITLE,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "標楷體", size: 36, bold: true } // 18pt * 2
+                    run: { font: "Microsoft JhengHei", size: 40, bold: true } // 20pt * 2
                 }),
                 new Paragraph({ text: "" }),
                 new Table({
@@ -186,7 +186,7 @@ window.generateWordTeacherScheduleJS = async function (data) {
         children.push(new Paragraph({
             text: data.title || '特教班教師課表',
             alignment: AlignmentType.CENTER,
-            run: { font: "標楷體", size: 40, bold: true } // 20pt
+            run: { font: "Microsoft JhengHei", size: 40, bold: true }
         }));
 
         // Teacher Name
@@ -339,7 +339,7 @@ window.generateWordStudentScheduleJS = async function (data) {
         children.push(new Paragraph({
             text: data.title || '學生課表',
             alignment: AlignmentType.CENTER,
-            run: { font: "標楷體", size: 40, bold: true } // 20pt
+            run: { font: "Microsoft JhengHei", size: 40, bold: true }
         }));
 
         // Student Name
@@ -493,7 +493,7 @@ window.generateWordClassroomScheduleJS = async function (data) {
                 new Paragraph({
                     text: `${data.title_prefix} ${room.name} 課表`,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "標楷體", size: 36, bold: true }
+                    run: { font: "Microsoft JhengHei", size: 40, bold: true }
                 }),
                 new Paragraph({
                     text: `製表日期: ${data.date_created}`,
