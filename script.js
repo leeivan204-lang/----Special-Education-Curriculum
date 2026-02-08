@@ -4380,32 +4380,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return row;
             });
 
-            // 3. Send to Backend
-            const response = await fetch(`${API_BASE}/export/word`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: title,
-                    date_range: dateRange,
-                    schedule: scheduleRows
-                })
+            // 3. Generate Client-Side
+            await window.generateWordScheduleJS({
+                title: title,
+                date_range: dateRange,
+                schedule: scheduleRows
             });
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.message || 'Export failed');
-            }
-
-            // 4. Download
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${title || 'schedule'}.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
 
         } catch (error) {
             console.error('Export Error:', error);
@@ -4551,28 +4531,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // 3. Send
-            const response = await fetch(`${API_BASE}/export/word/teacher`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: title,
-                    date_range: dateRange,
-                    teachers: teachersPayload
-                })
+            // 3. Generate Client-Side
+            await window.generateWordTeacherScheduleJS({
+                title: title,
+                date_range: dateRange,
+                teachers: teachersPayload
             });
-
-            if (!response.ok) throw new Error('Export failed');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${title}.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
 
         } catch (e) {
             console.error(e);
@@ -4660,27 +4624,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 classroomsPayload.push({ name: room, schedule_rows: scheduleRows });
             });
 
-            const response = await fetch(`${API_BASE}/export/word/classroom`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title_prefix: titlePrefix,
-                    date_created: dateCreated,
-                    classrooms: classroomsPayload
-                })
+            // Generate Client-Side
+            await window.generateWordClassroomScheduleJS({
+                title_prefix: titlePrefix,
+                date_created: dateCreated,
+                classrooms: classroomsPayload
             });
 
-            if (!response.ok) throw new Error('Export failed');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `classrooms_schedule.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
         } catch (e) {
             console.error(e);
             alert('匯出失敗: ' + e.message);
@@ -4810,27 +4760,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
 
-            // 4. Send API Request
-            const response = await fetch(`${API_BASE}/export/word/student`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: title,
-                    students: studentsPayload
-                })
+            // 4. Generate Client-Side
+            await window.generateWordStudentScheduleJS({
+                title: title,
+                students: studentsPayload
             });
-
-            if (!response.ok) throw new Error('Export failed');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `student_schedules.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
 
         } catch (e) {
             console.error(e);
