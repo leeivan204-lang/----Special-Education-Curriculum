@@ -1,0 +1,598 @@
+From 07737a8554cd30690124da8aa06872e6bf7294be Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 12 Apr 2026 15:28:45 +0000
+Subject: [PATCH] =?UTF-8?q?=E5=AE=89=E5=85=A8=E6=80=A7=E8=88=87=E5=8F=AF?=
+ =?UTF-8?q?=E9=9D=A0=E6=80=A7=E6=94=B9=E5=96=84=EF=BC=9A9=20=E9=A0=85?=
+ =?UTF-8?q?=E7=B3=BB=E7=B5=B1=E6=80=A7=E4=BF=AE=E6=AD=A3?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+🔴 立即優先
+- XSS 防護：新增 escHtml() 工具函式，對所有 innerHTML 中的使用者資料（學生姓名、教師姓名、課程名稱、分組名稱、教室等）進行 HTML 特殊字元轉義
+- 原子寫入：save_data 改用 tempfile + os.replace 寫入，防止當機時 JSON 損毀
+- 鎖定依賴版本：requirements.txt 固定各套件版本，新增 requirements-dev.txt 分離測試依賴
+
+🟠 短期優先
+- 時間戳記統一：getFullDataSnapshot 改用 Date.now()（UTC 毫秒整數），後端改為整數比對，消除格式差異引起的誤判衝突
+- localStorage 精準清除：resetState 從 localStorage.clear() 改為只移除本應用的 12 個 key
+- API_BASE 動態化：API_BASE 與 Socket.IO URL 改為根據 window.location 自動偵測，不再硬寫 localhost:3000
+
+🟡 中期優先
+- Schema 版本化：JSON 資料加入 schemaVersion 欄位，後端新增 migrate_data() 函式，未來結構異動可逐版升級
+
+🔵 長期優先
+- 限縮 CORS：從允許所有來源（*）改為明確的 ALLOWED_ORIGINS 白名單
+- 後端日誌：以 logging 模組取代所有 print()，同時輸出至 app.log 與 console
+
+https://claude.ai/code/session_01Q3rjh3xXFMzqkHQGdUsWFB
+---
+ app.py               | 105 ++++++++++++++++++++++++++++++-----------
+ requirements-dev.txt |   4 ++
+ requirements.txt     |  10 ++--
+ script.js            | 108 +++++++++++++++++++++++++++----------------
+ 4 files changed, 156 insertions(+), 71 deletions(-)
+ create mode 100644 requirements-dev.txt
+
+diff --git a/app.py b/app.py
+index 8da8275..d53757f 100644
+--- a/app.py
++++ b/app.py
+@@ -1,6 +1,8 @@
+ import os
+ import json
+ import sys
++import tempfile
++import logging
+ from flask import Flask, request, jsonify, send_from_directory
+ from flask_cors import CORS
+ from flask_socketio import SocketIO, emit, join_room
+@@ -27,9 +29,28 @@ else:
+     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+     STATIC_FOLDER = '.'
+ 
++# --- 後端日誌設定 ---
++LOG_FILE = os.path.join(BASE_DIR, 'app.log')
++logging.basicConfig(
++    level=logging.INFO,
++    format='%(asctime)s [%(levelname)s] %(message)s',
++    handlers=[
++        logging.FileHandler(LOG_FILE, encoding='utf-8'),
++        logging.StreamHandler()   # 同時輸出至 console
++    ]
++)
++logger = logging.getLogger(__name__)
++
++# --- CORS 允許來源 ---
++# 僅允許本地端存取；若需開放其他主機，在此陣列中新增
++ALLOWED_ORIGINS = [
++    'http://localhost:3000',
++    'http://127.0.0.1:3000',
++]
++
+ app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
+-CORS(app)  # Enable Cross-Origin Resource Sharing
+-socketio = SocketIO(app, cors_allowed_origins="*")
++CORS(app, origins=ALLOWED_ORIGINS)
++socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+ 
+ # Configuration
+ PORT = 3000
+@@ -38,6 +59,7 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
+ # Ensure data directory exists
+ if not os.path.exists(DATA_DIR):
+     os.makedirs(DATA_DIR)
++    logger.info(f"Created data directory: {DATA_DIR}")
+ 
+ # Presence Tracking
+ socket_to_user = {} # sid -> user_id
+@@ -67,7 +89,7 @@ def on_join(data):
+         user_sockets[user_id].add(sid)
+         
+         count = len(user_sockets[user_id])
+-        print(f"Client {sid} joined room {user_id}. Total count: {count}")
++        logger.info(f"Client {sid} joined room {user_id}. Total count: {count}")
+         
+         emit('status', {'msg': f'Joined room {user_id}'}, room=user_id)
+         
+@@ -92,7 +114,7 @@ def on_disconnect():
+         if sid in socket_to_user:
+             del socket_to_user[sid]
+             
+-        print(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
++        logger.info(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
+ 
+ # API: Login
+ @app.route('/api/login', methods=['POST'])
+@@ -107,20 +129,36 @@ def login():
+     # We allow "Spe for u" or any ID for this local version.
+     return jsonify({'success': True, 'message': 'Login successful'})
+ 
++CURRENT_SCHEMA_VERSION = 1
++
++def migrate_data(data):
++    """將舊版 JSON 結構升級至最新版本，保持向後相容。"""
++    version = data.get('schemaVersion', 0)
++
++    # v0 → v1：補上 schemaVersion 欄位（首次遷移，無結構變動）
++    if version < 1:
++        data['schemaVersion'] = 1
++        logger.info("Migrated data schema: v0 → v1")
++
++    # 未來版本在此新增 if version < N 區塊
++
++    return data
++
+ # API: Get Data
+ @app.route('/api/data/<user_id>', methods=['GET'])
+ def get_data(user_id):
+     file_path = os.path.join(DATA_DIR, f"{user_id}.json")
+-    
++
+     try:
+         if os.path.exists(file_path):
+             with open(file_path, 'r', encoding='utf-8') as f:
+                 data = json.load(f)
++            data = migrate_data(data)
+             return jsonify({'success': True, 'data': data})
+         else:
+             return jsonify({'success': True, 'data': None})
+     except Exception as e:
+-        print(f"Error reading data: {e}")
++        logger.error(f"Error reading data: {e}")
+         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
+ 
+ # API: Save Data
+@@ -150,19 +188,36 @@ def save_data(user_id):
+             # Extract timestamp from existing data
+             existing_timestamp = existing_file_content.get('timestamp')
+             
+-            if str(existing_timestamp) != str(client_timestamp):
+-                print(f"Conflict detected for {user_id}. Server: {existing_timestamp}, Client saw: {client_timestamp}")
++            # 統一轉為整數（毫秒）比對，避免格式差異造成誤判
++            try:
++                ts_server = int(existing_timestamp)
++                ts_client = int(client_timestamp)
++            except (TypeError, ValueError):
++                ts_server = str(existing_timestamp)
++                ts_client = str(client_timestamp)
++
++            if ts_server != ts_client:
++                logger.warning(f"Conflict detected for {user_id}. Server: {existing_timestamp}, Client saw: {client_timestamp}")
+                 return jsonify({
+                     'success': False, 
+                     'message': 'Data conflict detected. Please reload.',
+                     'serverData': existing_file_content
+                 }), 409
+ 
+-        # Write new data
+-        with open(file_path, 'w', encoding='utf-8') as f:
+-            json.dump(new_data, f, ensure_ascii=False, indent=2)
+-        
+-            # Broadcast update to room
++        # 原子寫入：先寫暫存檔，再用 os.replace 一次性替換，防止寫到一半當機時 JSON 損毀
++        tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
++        try:
++            with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
++                json.dump(new_data, f, ensure_ascii=False, indent=2)
++            os.replace(tmp_path, file_path)
++        except Exception:
++            try:
++                os.unlink(tmp_path)
++            except OSError:
++                pass
++            raise
++
++        # Broadcast update to room
+         try:
+             # We broadcast the new timestamp so clients know there is a new version
+             # We don't broadcast full data (efficiency), just notification
+@@ -172,13 +227,13 @@ def save_data(user_id):
+                 'sourceSocketId': socket_id, # Echo back the sender's socket ID
+                 'updater': request.remote_addr  # Optional: who updated?
+             }, room=user_id)
+-            print(f"Broadcasted update for room {user_id}")
++            logger.info(f"Broadcasted update for room {user_id}")
+         except Exception as e:
+-            print(f"Socket emit failed: {e}")
++            logger.warning(f"Socket emit failed: {e}")
+ 
+         return jsonify({'success': True, 'message': 'Data saved successfully'})
+     except Exception as e:
+-        print(f"Error writing data: {e}")
++        logger.error(f"Error writing data: {e}")
+         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
+ 
+ # --- WORD EXPORT FUNCTIONALITY ---
+@@ -606,24 +661,22 @@ def generate_word_teacher_schedule(data):
+ def export_word_teacher():
+     try:
+         data = request.json
+-        print("Generating Teacher Word...")
++        logger.info("Generating Teacher Word...")
+         file_stream = generate_word_teacher_schedule(data)
+         return send_file(file_stream, as_attachment=True, download_name='teachers_schedule.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+     except Exception as e:
+-        print(f"Error: {e}")
++        logger.error(f"Error generating Teacher Word: {e}")
+         return jsonify({'success': False, 'message': str(e)}), 500
+ 
+ 
+ 
+ 
+ 
+-
+-
+ @app.route('/api/export/word', methods=['POST'])
+ def export_word():
+     try:
+         data = request.json
+-        print("Generating Word document...")
++        logger.info("Generating Word document...")
+         
+         file_stream = generate_word_schedule(data)
+         
+@@ -634,14 +687,14 @@ def export_word():
+             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+         )
+     except Exception as e:
+-        print(f"Error generating Word: {e}")
++        logger.error(f"Error generating Word: {e}")
+         return jsonify({'success': False, 'message': str(e)}), 500
+ 
+ @app.route('/api/export/word/student', methods=['POST'])
+ def export_word_student():
+     try:
+         data = request.json
+-        print("Generating Student Word...")
++        logger.info("Generating Student Word...")
+         file_stream = generate_word_student_schedule(data)
+         return send_file(
+             file_stream, 
+@@ -650,7 +703,7 @@ def export_word_student():
+             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+         )
+     except Exception as e:
+-        print(f"Error: {e}")
++        logger.error(f"Error generating Student Word: {e}")
+         return jsonify({'success': False, 'message': str(e)}), 500
+ 
+ def generate_word_student_schedule(data):
+@@ -825,7 +878,7 @@ def generate_word_student_schedule(data):
+     return f
+ 
+ if __name__ == '__main__':
+-    print(f"Server is running at http://localhost:{PORT}")
+-    print(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
++    logger.info(f"Server is running at http://localhost:{PORT}")
++    logger.info(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
+     # app.run(host='0.0.0.0', port=PORT, debug=True)
+     socketio.run(app, host='0.0.0.0', port=PORT, debug=True, allow_unsafe_werkzeug=True)
+diff --git a/requirements-dev.txt b/requirements-dev.txt
+new file mode 100644
+index 0000000..92e187e
+--- /dev/null
++++ b/requirements-dev.txt
+@@ -0,0 +1,4 @@
++# 開發與測試環境依賴（不需要打包進 exe）
++-r requirements.txt
++pytest==8.2.2
++pytest-flask==1.3.0
+diff --git a/requirements.txt b/requirements.txt
+index dbf8880..3a43fa9 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,5 +1,5 @@
+-flask
+-flask-cors
+-flask-socketio
+-python-docx
+-requests
++flask==3.0.3
++flask-cors==4.0.1
++flask-socketio==5.3.6
++python-docx==1.2.0
++requests==2.33.1
+diff --git a/script.js b/script.js
+index af67eb2..e71d253 100644
+--- a/script.js
++++ b/script.js
+@@ -21,10 +21,16 @@ document.addEventListener('DOMContentLoaded', () => {
+     let CURRENT_USER = null;
+     let LAST_SYNCED_TIMESTAMP = null; // Track the base version for optimistic locking
+     let PENDING_SAVE_TIMESTAMP = null; // Track our own pending save to ignore self-notifications
+-    const API_BASE = 'http://localhost:3000/api';
++    // 動態偵測 API Base URL，自動適配本地開發、GitHub Pages、及任意部署環境
++    const API_BASE = (window.location.protocol === 'file:' || window.location.hostname === '')
++        ? 'http://localhost:3000/api'          // 以 file:// 開啟的靜態模式，回退到本地伺服器
++        : `${window.location.origin}/api`;     // 相對路徑，自動跟隨當前 host
+ 
+-    // Initialize Socket.IO
+-    const socket = io('http://localhost:3000');
++    // Initialize Socket.IO（連線 URL 跟隨 API_BASE 的 origin）
++    const SOCKET_URL = (window.location.protocol === 'file:' || window.location.hostname === '')
++        ? 'http://localhost:3000'
++        : window.location.origin;
++    const socket = io(SOCKET_URL);
+ 
+     socket.on('connect', () => {
+         console.log('Connected to WebSocket server');
+@@ -139,6 +145,17 @@ document.addEventListener('DOMContentLoaded', () => {
+         }
+     }
+ 
++    // 安全工具：將使用者輸入的字串轉義 HTML 特殊字元，防止 XSS 攻擊
++    function escHtml(str) {
++        if (str == null) return '';
++        return String(str)
++            .replace(/&/g, '&amp;')
++            .replace(/</g, '&lt;')
++            .replace(/>/g, '&gt;')
++            .replace(/"/g, '&quot;')
++            .replace(/'/g, '&#39;');
++    }
++
+     function resetState() {
+         console.log('Resetting state for new user...');
+         courses = [];
+@@ -151,7 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
+         implementationDates = { startDate: '', endDate: '' };
+         studentManualEntries = {};
+         slotOverrides = {};
+-        localStorage.clear();
++        // 只清除本應用的 key，避免影響同源其他應用的資料
++        const APP_STORAGE_KEYS = [
++            'courses', 'students', 'teachers', 'assignments', 'scheduleData',
++            'teacherPartTimeMarks', 'scheduleTitle', 'implementationDates',
++            'studentManualEntries', 'slotOverrides',
++            'lastSavedTimestamp', 'lastCloudBackupTimestamp'
++        ];
++        APP_STORAGE_KEYS.forEach(k => localStorage.removeItem(k));
+     }
+ 
+     async function handleLogin() {
+@@ -929,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
+         // Let's check getFullDataSnapshot.
+         // Assuming it does, we just update status here.
+         // We'll manually set the local TS in localStorage if not set, to ensure comparison works
+-        localStorage.setItem('lastSavedTimestamp', new Date().getTime());
++        localStorage.setItem('lastSavedTimestamp', Date.now());
+         updateCloudSyncStatus();
+     };
+ 
+@@ -1056,10 +1080,14 @@ document.addEventListener('DOMContentLoaded', () => {
+         }
+     }
+ 
++    // 目前 Schema 版本號，每次有結構性異動時遞增
++    const SCHEMA_VERSION = 1;
++
+     // Helper: Get Full Data Snapshot
+     function getFullDataSnapshot() {
+         return {
+-            timestamp: new Date().toISOString(),
++            schemaVersion: SCHEMA_VERSION,
++            timestamp: Date.now(), // UTC 毫秒整數，避免時區格式差異造成比對錯誤
+             courses: JSON.parse(localStorage.getItem('courses') || '[]'),
+             teachers: JSON.parse(localStorage.getItem('teachers') || '[]'),
+             students: JSON.parse(localStorage.getItem('students') || '[]'),
+@@ -1092,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
+         if (data.scheduleTitle) localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle));
+         // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
+ 
+-        localStorage.setItem('lastSavedTimestamp', data.timestamp || new Date().toISOString());
++        localStorage.setItem('lastSavedTimestamp', data.timestamp || Date.now());
+ 
+         // Sync restored data to server
+         saveAllDataToServer();
+@@ -1112,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
+         modalTitle.textContent = courseToEdit ? '編輯課程' : '新增課程';
+ 
+         // Generate teacher options
+-        const teacherOptions = teachers.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
++        const teacherOptions = teachers.map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('');
+ 
+         modalBody.innerHTML = `
+             <div class="form-group">
+@@ -1438,7 +1466,7 @@ document.addEventListener('DOMContentLoaded', () => {
+             return `
+             <div class="course-item-card">
+                 <div class="course-item-header">
+-                    <div class="course-item-title">${course.name} <span style="font-size: 0.8rem; color: #666; font-weight: normal;">(${hours} 節)</span></div>
++                    <div class="course-item-title">${escHtml(course.name)} <span style="font-size: 0.8rem; color: #666; font-weight: normal;">(${hours} 節)</span></div>
+                     <div class="course-actions">
+                         <button class="btn-secondary btn-sm" onclick="editCourse(${course.id})">編輯</button>
+                         <button class="btn-secondary btn-sm" onclick="deleteCourse(${course.id})">刪除</button>
+@@ -1452,16 +1480,16 @@ document.addEventListener('DOMContentLoaded', () => {
+                 // Handle both array and string formats
+                 let teacherDisplay = '未排';
+                 if (Array.isArray(teacherData)) {
+-                    teacherDisplay = teacherData.filter(t => t && t !== '').join(', ') || '未排';
++                    teacherDisplay = teacherData.filter(t => t && t !== '').map(escHtml).join(', ') || '未排';
+                 } else if (teacherData) {
+-                    teacherDisplay = teacherData;
++                    teacherDisplay = escHtml(teacherData);
+                 }
+                 return `
+                             <div class="group-tag-container" style="display: flex; flex-direction: column; gap: 2px; align-items: flex-start;">
+-                                <span class="group-tag">${g}</span>
++                                <span class="group-tag">${escHtml(g)}</span>
+                                 <div style="font-size: 0.8rem; color: #666; display: flex; gap: 5px;">
+                                     <span>👨‍🏫 ${teacherDisplay}</span>
+-                                    <span>🏠 ${room}</span>
++                                    <span>🏠 ${escHtml(room)}</span>
+                                 </div>
+                             </div>
+                         `;
+@@ -1539,8 +1567,8 @@ document.addEventListener('DOMContentLoaded', () => {
+         studentListContainer.innerHTML = sortedStudents.map(student => `
+             <div class="student-card">
+                 <div class="student-info">
+-                    <span class="student-grade" onclick="toggleGrade(event, ${student.id})" style="cursor: pointer;" title="點擊切換年級">${student.grade}</span>
+-                    ${student.name}
++                    <span class="student-grade" onclick="toggleGrade(event, ${student.id})" style="cursor: pointer;" title="點擊切換年級">${escHtml(String(student.grade))}</span>
++                    ${escHtml(student.name)}
+                 </div>
+                 <button class="btn-secondary" style="padding: 2px 8px; font-size: 0.8rem;" onclick="deleteStudent(${student.id})">刪除</button>
+             </div>
+@@ -1557,7 +1585,7 @@ document.addEventListener('DOMContentLoaded', () => {
+         modalBody.innerHTML = `
+             <div class="form-group">
+                 <label>教師姓名</label>
+-                <input type="text" id="teacher-name" class="form-control" placeholder="請輸入姓名" value="${teacherToEdit ? teacherToEdit.name : ''}">
++                <input type="text" id="teacher-name" class="form-control" placeholder="請輸入姓名" value="${teacherToEdit ? escHtml(teacherToEdit.name) : ''}">
+             </div>
+             <div class="form-group">
+                 <label>基本鐘點</label>
+@@ -1620,7 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
+             <div class="teacher-card">
+                 <div class="teacher-info">
+                     <div class="teacher-icon">T</div>
+-                    ${teacher.name}
++                    ${escHtml(teacher.name)}
+                 </div>
+                 <div>
+                     <button class="btn-edit" onclick="editTeacher(${teacher.id})" style="margin-right: 0.5rem;">
+@@ -1715,8 +1743,8 @@ document.addEventListener('DOMContentLoaded', () => {
+         // Render Group Columns
+         groupsColumnsContainer.innerHTML = course.groups.map(groupName => `
+             <div class="group-column">
+-                <div class="group-column-header">${groupName}</div>
+-                <div class="group-drop-zone" data-group="${groupName}">
++                <div class="group-column-header">${escHtml(groupName)}</div>
++                <div class="group-drop-zone" data-group="${escHtml(groupName)}">
+                     ${renderAssignedStudents(courseId, groupName)}
+                 </div>
+             </div>
+@@ -1788,8 +1816,8 @@ document.addEventListener('DOMContentLoaded', () => {
+     function createDraggableStudentHTML(student) {
+         return `
+             <div class="draggable-student" draggable="true" data-student-id="${student.id}">
+-                <span class="student-grade">${student.grade}</span>
+-                ${student.name}
++                <span class="student-grade">${escHtml(String(student.grade))}</span>
++                ${escHtml(student.name)}
+             </div>
+         `;
+     }
+@@ -1810,7 +1838,7 @@ document.addEventListener('DOMContentLoaded', () => {
+ 
+             html += `
+                 <div class="overview-course-section">
+-                    <div class="overview-course-title">${course.name}</div>
++                    <div class="overview-course-title">${escHtml(course.name)}</div>
+                     <div class="overview-groups-grid">
+             `;
+ 
+@@ -1823,7 +1851,7 @@ document.addEventListener('DOMContentLoaded', () => {
+ 
+                 html += `
+                     <div class="overview-group-card">
+-                        <div class="overview-group-name">${groupName}</div>
++                        <div class="overview-group-name">${escHtml(groupName)}</div>
+                         <div class="overview-students-list">
+                 `;
+ 
+@@ -1833,8 +1861,8 @@ document.addEventListener('DOMContentLoaded', () => {
+                     groupStudents.forEach(student => {
+                         html += `
+                             <div class="overview-student-item">
+-                                <span class="student-grade">${student.grade}</span>
+-                                ${student.name}
++                                <span class="student-grade">${escHtml(String(student.grade))}</span>
++                                ${escHtml(student.name)}
+                             </div>
+                         `;
+                     });
+@@ -2133,12 +2161,12 @@ document.addEventListener('DOMContentLoaded', () => {
+             const opacity = isFull ? '0.5' : '1';
+ 
+             html += `
+-                <div class="course-block" 
++                <div class="course-block"
+                      draggable="${!isFull}"
+                      data-course-id="${course.id}"
+-                     data-course-name="${course.name}"
++                     data-course-name="${escHtml(course.name)}"
+                      style="opacity: ${opacity}">
+-                    <div class="course-block-header">${course.name}</div>
++                    <div class="course-block-header">${escHtml(course.name)}</div>
+                     <div class="course-block-number">已排/總時數: ${usedBlocks} / ${maxHours}</div>
+                 </div>
+             `;
+@@ -2185,7 +2213,7 @@ document.addEventListener('DOMContentLoaded', () => {
+                                  data-slot-key="${slotKey}"
+                                  data-item-index="${index}">
+                                 <button class="btn-remove" onclick="removeFromSchedule('${slotKey}', ${index})">✖</button>
+-                                <div class="course-subject">${course.name}</div>
++                                <div class="course-subject">${escHtml(course.name)}</div>
+                             </div>
+                         `;
+                     }
+@@ -2514,9 +2542,9 @@ document.addEventListener('DOMContentLoaded', () => {
+                         let teacherDisplay = '未排';
+                         if (Array.isArray(teacherData)) {
+                             // Join with <br> to ensure one teacher per line
+-                            teacherDisplay = teacherData.filter(t => t && t !== '').join('<br>') || '未排';
++                            teacherDisplay = teacherData.filter(t => t && t !== '').map(escHtml).join('<br>') || '未排';
+                         } else if (teacherData) {
+-                            teacherDisplay = teacherData;
++                            teacherDisplay = escHtml(teacherData);
+                         }
+ 
+                         // 如果只有一個區塊，讓它跨兩欄
+@@ -2524,16 +2552,16 @@ document.addEventListener('DOMContentLoaded', () => {
+                         const spanClass = isSingleBlock ? 'span-2' : '';
+ 
+                         // 整合模式：若群組名稱與課程名稱相同，則不顯示群組名稱
+-                        const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${groupName}</span>`;
++                        const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${escHtml(groupName)}</span>`;
+ 
+                         if (isClassroomIntegrated) {
+                             // Classroom Integrated Mode: Show only course, teacher, room
+                             html += `
+                                         <div class="master-group-block classroom-integrated ${spanClass}">
+-                                            <div class="master-group-header">${course.name} ${displayGroupName}</div>
++                                            <div class="master-group-header">${escHtml(course.name)} ${displayGroupName}</div>
+                                             <div class="master-group-info-vertical">
+                                                 <div class="master-info-row">👨‍🏫 ${teacherDisplay}</div>
+-                                                <div class="master-info-row">🏠 ${details.room || '待訂'}</div>
++                                                <div class="master-info-row">🏠 ${escHtml(details.room || '待訂')}</div>
+                                             </div>
+                                         </div>
+                                     `;
+@@ -2561,26 +2589,26 @@ document.addEventListener('DOMContentLoaded', () => {
+ 
+                             const studentNames = groupStudents.map(studentId => {
+                                 const student = students.find(s => s.id === studentId);
+-                                return student ? `${student.grade} ${student.name}` : '';
++                                return student ? `${escHtml(String(student.grade))} ${escHtml(student.name)}` : '';
+                             }).filter(name => name);
+ 
+                             const isOverridden = !!override;
+                             const blockId = `block-${slotKey}-${course.id}-${groupName}`;
+ 
+                             // 若群組名稱與課程名稱相同，則不顯示群組名稱
+-                            const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${groupName}</span>`;
++                            const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${escHtml(groupName)}</span>`;
+ 
+                             html += `
+                                         <div class="master-group-block ${spanClass}" id="${blockId}">
+                                             <div class="master-group-header">
+-                                                ${course.name} ${displayGroupName}
+-                                                <span class="btn-edit-override ${isOverridden ? 'active' : ''}" 
+-                                                      onclick="openStudentOverrideModal('${slotKey}', ${course.id}, '${groupName}')"
++                                                ${escHtml(course.name)} ${displayGroupName}
++                                                <span class="btn-edit-override ${isOverridden ? 'active' : ''}"
++                                                      onclick="openStudentOverrideModal('${slotKey}', ${course.id}, '${escHtml(groupName)}')"
+                                                       title="編輯此時段學生名單">✎</span>
+                                             </div>
+                                             <div class="master-group-info-vertical">
+                                                 <div class="master-info-row">👨‍🏫 ${teacherDisplay}</div>
+-                                                <div class="master-info-row">🏠 ${details.room || '待訂'}</div>
++                                                <div class="master-info-row">🏠 ${escHtml(details.room || '待訂')}</div>
+                                             </div>
+                                             ${studentNames.length > 0 ? `
+                                                 <div class="master-student-list-vertical">
+-- 
+2.43.0

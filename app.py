@@ -1,6 +1,8 @@
 import os
 import json
 import sys
+import tempfile
+import logging
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
@@ -27,9 +29,28 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     STATIC_FOLDER = '.'
 
+# --- 後端日誌設定 ---
+LOG_FILE = os.path.join(BASE_DIR, 'app.log')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler()   # 同時輸出至 console
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- CORS 允許來源 ---
+# 僅允許本地端存取；若需開放其他主機，在此陣列中新增
+ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
-CORS(app)  # Enable Cross-Origin Resource Sharing
-socketio = SocketIO(app, cors_allowed_origins="*")
+CORS(app, origins=ALLOWED_ORIGINS)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
 
 # Configuration
 PORT = 3000
@@ -38,6 +59,7 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
 # Ensure data directory exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
+    logger.info(f"Created data directory: {DATA_DIR}")
 
 # Presence Tracking
 socket_to_user = {} # sid -> user_id
@@ -67,7 +89,7 @@ def on_join(data):
         user_sockets[user_id].add(sid)
         
         count = len(user_sockets[user_id])
-        print(f"Client {sid} joined room {user_id}. Total count: {count}")
+        logger.info(f"Client {sid} joined room {user_id}. Total count: {count}")
         
         emit('status', {'msg': f'Joined room {user_id}'}, room=user_id)
         
@@ -92,7 +114,7 @@ def on_disconnect():
         if sid in socket_to_user:
             del socket_to_user[sid]
             
-        print(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
+        logger.info(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
 
 # API: Login
 @app.route('/api/login', methods=['POST'])
@@ -107,20 +129,36 @@ def login():
     # We allow "Spe for u" or any ID for this local version.
     return jsonify({'success': True, 'message': 'Login successful'})
 
+CURRENT_SCHEMA_VERSION = 1
+
+def migrate_data(data):
+    """將舊版 JSON 結構升級至最新版本，保持向後相容。"""
+    version = data.get('schemaVersion', 0)
+
+    # v0 → v1：補上 schemaVersion 欄位（首次遷移，無結構變動）
+    if version < 1:
+        data['schemaVersion'] = 1
+        logger.info("Migrated data schema: v0 → v1")
+
+    # 未來版本在此新增 if version < N 區塊
+
+    return data
+
 # API: Get Data
 @app.route('/api/data/<user_id>', methods=['GET'])
 def get_data(user_id):
     file_path = os.path.join(DATA_DIR, f"{user_id}.json")
-    
+
     try:
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            data = migrate_data(data)
             return jsonify({'success': True, 'data': data})
         else:
             return jsonify({'success': True, 'data': None})
     except Exception as e:
-        print(f"Error reading data: {e}")
+        logger.error(f"Error reading data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
 
 # API: Save Data
@@ -150,19 +188,36 @@ def save_data(user_id):
             # Extract timestamp from existing data
             existing_timestamp = existing_file_content.get('timestamp')
             
-            if str(existing_timestamp) != str(client_timestamp):
-                print(f"Conflict detected for {user_id}. Server: {existing_timestamp}, Client saw: {client_timestamp}")
+            # 統一轉為整數（毫秒）比對，避免格式差異造成誤判
+            try:
+                ts_server = int(existing_timestamp)
+                ts_client = int(client_timestamp)
+            except (TypeError, ValueError):
+                ts_server = str(existing_timestamp)
+                ts_client = str(client_timestamp)
+
+            if ts_server != ts_client:
+                logger.warning(f"Conflict detected for {user_id}. Server: {existing_timestamp}, Client saw: {client_timestamp}")
                 return jsonify({
                     'success': False, 
                     'message': 'Data conflict detected. Please reload.',
                     'serverData': existing_file_content
                 }), 409
 
-        # Write new data
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(new_data, f, ensure_ascii=False, indent=2)
-        
-            # Broadcast update to room
+        # 原子寫入：先寫暫存檔，再用 os.replace 一次性替換，防止寫到一半當機時 JSON 損毀
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
+        try:
+            with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+                json.dump(new_data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        # Broadcast update to room
         try:
             # We broadcast the new timestamp so clients know there is a new version
             # We don't broadcast full data (efficiency), just notification
@@ -172,13 +227,13 @@ def save_data(user_id):
                 'sourceSocketId': socket_id, # Echo back the sender's socket ID
                 'updater': request.remote_addr  # Optional: who updated?
             }, room=user_id)
-            print(f"Broadcasted update for room {user_id}")
+            logger.info(f"Broadcasted update for room {user_id}")
         except Exception as e:
-            print(f"Socket emit failed: {e}")
+            logger.warning(f"Socket emit failed: {e}")
 
         return jsonify({'success': True, 'message': 'Data saved successfully'})
     except Exception as e:
-        print(f"Error writing data: {e}")
+        logger.error(f"Error writing data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
 
 # --- WORD EXPORT FUNCTIONALITY ---
@@ -606,14 +661,12 @@ def generate_word_teacher_schedule(data):
 def export_word_teacher():
     try:
         data = request.json
-        print("Generating Teacher Word...")
+        logger.info("Generating Teacher Word...")
         file_stream = generate_word_teacher_schedule(data)
         return send_file(file_stream, as_attachment=True, download_name='teachers_schedule.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error generating Teacher Word: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
-
-
 
 
 
@@ -623,7 +676,7 @@ def export_word_teacher():
 def export_word():
     try:
         data = request.json
-        print("Generating Word document...")
+        logger.info("Generating Word document...")
         
         file_stream = generate_word_schedule(data)
         
@@ -634,14 +687,14 @@ def export_word():
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
     except Exception as e:
-        print(f"Error generating Word: {e}")
+        logger.error(f"Error generating Word: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/export/word/student', methods=['POST'])
 def export_word_student():
     try:
         data = request.json
-        print("Generating Student Word...")
+        logger.info("Generating Student Word...")
         file_stream = generate_word_student_schedule(data)
         return send_file(
             file_stream, 
@@ -650,7 +703,7 @@ def export_word_student():
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error generating Student Word: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 def generate_word_student_schedule(data):
@@ -825,7 +878,7 @@ def generate_word_student_schedule(data):
     return f
 
 if __name__ == '__main__':
-    print(f"Server is running at http://localhost:{PORT}")
-    print(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
+    logger.info(f"Server is running at http://localhost:{PORT}")
+    logger.info(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
     # app.run(host='0.0.0.0', port=PORT, debug=True)
     socketio.run(app, host='0.0.0.0', port=PORT, debug=True, allow_unsafe_werkzeug=True)

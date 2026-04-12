@@ -21,10 +21,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let CURRENT_USER = null;
     let LAST_SYNCED_TIMESTAMP = null; // Track the base version for optimistic locking
     let PENDING_SAVE_TIMESTAMP = null; // Track our own pending save to ignore self-notifications
-    const API_BASE = 'http://localhost:3000/api';
+    // 動態偵測 API Base URL，自動適配本地開發、GitHub Pages、及任意部署環境
+    const API_BASE = (window.location.protocol === 'file:' || window.location.hostname === '')
+        ? 'http://localhost:3000/api'          // 以 file:// 開啟的靜態模式，回退到本地伺服器
+        : `${window.location.origin}/api`;     // 相對路徑，自動跟隨當前 host
 
-    // Initialize Socket.IO
-    const socket = io('http://localhost:3000');
+    // Initialize Socket.IO（連線 URL 跟隨 API_BASE 的 origin）
+    const SOCKET_URL = (window.location.protocol === 'file:' || window.location.hostname === '')
+        ? 'http://localhost:3000'
+        : window.location.origin;
+    const socket = io(SOCKET_URL);
 
     socket.on('connect', () => {
         console.log('Connected to WebSocket server');
@@ -139,6 +145,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 安全工具：將使用者輸入的字串轉義 HTML 特殊字元，防止 XSS 攻擊
+    function escHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function resetState() {
         console.log('Resetting state for new user...');
         courses = [];
@@ -151,7 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
         implementationDates = { startDate: '', endDate: '' };
         studentManualEntries = {};
         slotOverrides = {};
-        localStorage.clear();
+        // 只清除本應用的 key，避免影響同源其他應用的資料
+        const APP_STORAGE_KEYS = [
+            'courses', 'students', 'teachers', 'assignments', 'scheduleData',
+            'teacherPartTimeMarks', 'scheduleTitle', 'implementationDates',
+            'studentManualEntries', 'slotOverrides',
+            'lastSavedTimestamp', 'lastCloudBackupTimestamp'
+        ];
+        APP_STORAGE_KEYS.forEach(k => localStorage.removeItem(k));
     }
 
     async function handleLogin() {
@@ -929,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Let's check getFullDataSnapshot.
         // Assuming it does, we just update status here.
         // We'll manually set the local TS in localStorage if not set, to ensure comparison works
-        localStorage.setItem('lastSavedTimestamp', new Date().getTime());
+        localStorage.setItem('lastSavedTimestamp', Date.now());
         updateCloudSyncStatus();
     };
 
@@ -1056,10 +1080,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 目前 Schema 版本號，每次有結構性異動時遞增
+    const SCHEMA_VERSION = 1;
+
     // Helper: Get Full Data Snapshot
     function getFullDataSnapshot() {
         return {
-            timestamp: new Date().toISOString(),
+            schemaVersion: SCHEMA_VERSION,
+            timestamp: Date.now(), // UTC 毫秒整數，避免時區格式差異造成比對錯誤
             courses: JSON.parse(localStorage.getItem('courses') || '[]'),
             teachers: JSON.parse(localStorage.getItem('teachers') || '[]'),
             students: JSON.parse(localStorage.getItem('students') || '[]'),
@@ -1092,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.scheduleTitle) localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle));
         // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
 
-        localStorage.setItem('lastSavedTimestamp', data.timestamp || new Date().toISOString());
+        localStorage.setItem('lastSavedTimestamp', data.timestamp || Date.now());
 
         // Sync restored data to server
         saveAllDataToServer();
@@ -1112,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = courseToEdit ? '編輯課程' : '新增課程';
 
         // Generate teacher options
-        const teacherOptions = teachers.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+        const teacherOptions = teachers.map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('');
 
         modalBody.innerHTML = `
             <div class="form-group">
@@ -1438,7 +1466,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `
             <div class="course-item-card">
                 <div class="course-item-header">
-                    <div class="course-item-title">${course.name} <span style="font-size: 0.8rem; color: #666; font-weight: normal;">(${hours} 節)</span></div>
+                    <div class="course-item-title">${escHtml(course.name)} <span style="font-size: 0.8rem; color: #666; font-weight: normal;">(${hours} 節)</span></div>
                     <div class="course-actions">
                         <button class="btn-secondary btn-sm" onclick="editCourse(${course.id})">編輯</button>
                         <button class="btn-secondary btn-sm" onclick="deleteCourse(${course.id})">刪除</button>
@@ -1452,16 +1480,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Handle both array and string formats
                 let teacherDisplay = '未排';
                 if (Array.isArray(teacherData)) {
-                    teacherDisplay = teacherData.filter(t => t && t !== '').join(', ') || '未排';
+                    teacherDisplay = teacherData.filter(t => t && t !== '').map(escHtml).join(', ') || '未排';
                 } else if (teacherData) {
-                    teacherDisplay = teacherData;
+                    teacherDisplay = escHtml(teacherData);
                 }
                 return `
                             <div class="group-tag-container" style="display: flex; flex-direction: column; gap: 2px; align-items: flex-start;">
-                                <span class="group-tag">${g}</span>
+                                <span class="group-tag">${escHtml(g)}</span>
                                 <div style="font-size: 0.8rem; color: #666; display: flex; gap: 5px;">
                                     <span>👨‍🏫 ${teacherDisplay}</span>
-                                    <span>🏠 ${room}</span>
+                                    <span>🏠 ${escHtml(room)}</span>
                                 </div>
                             </div>
                         `;
@@ -1539,8 +1567,8 @@ document.addEventListener('DOMContentLoaded', () => {
         studentListContainer.innerHTML = sortedStudents.map(student => `
             <div class="student-card">
                 <div class="student-info">
-                    <span class="student-grade" onclick="toggleGrade(event, ${student.id})" style="cursor: pointer;" title="點擊切換年級">${student.grade}</span>
-                    ${student.name}
+                    <span class="student-grade" onclick="toggleGrade(event, ${student.id})" style="cursor: pointer;" title="點擊切換年級">${escHtml(String(student.grade))}</span>
+                    ${escHtml(student.name)}
                 </div>
                 <button class="btn-secondary" style="padding: 2px 8px; font-size: 0.8rem;" onclick="deleteStudent(${student.id})">刪除</button>
             </div>
@@ -1557,7 +1585,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalBody.innerHTML = `
             <div class="form-group">
                 <label>教師姓名</label>
-                <input type="text" id="teacher-name" class="form-control" placeholder="請輸入姓名" value="${teacherToEdit ? teacherToEdit.name : ''}">
+                <input type="text" id="teacher-name" class="form-control" placeholder="請輸入姓名" value="${teacherToEdit ? escHtml(teacherToEdit.name) : ''}">
             </div>
             <div class="form-group">
                 <label>基本鐘點</label>
@@ -1620,7 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="teacher-card">
                 <div class="teacher-info">
                     <div class="teacher-icon">T</div>
-                    ${teacher.name}
+                    ${escHtml(teacher.name)}
                 </div>
                 <div>
                     <button class="btn-edit" onclick="editTeacher(${teacher.id})" style="margin-right: 0.5rem;">
@@ -1715,8 +1743,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render Group Columns
         groupsColumnsContainer.innerHTML = course.groups.map(groupName => `
             <div class="group-column">
-                <div class="group-column-header">${groupName}</div>
-                <div class="group-drop-zone" data-group="${groupName}">
+                <div class="group-column-header">${escHtml(groupName)}</div>
+                <div class="group-drop-zone" data-group="${escHtml(groupName)}">
                     ${renderAssignedStudents(courseId, groupName)}
                 </div>
             </div>
@@ -1788,8 +1816,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function createDraggableStudentHTML(student) {
         return `
             <div class="draggable-student" draggable="true" data-student-id="${student.id}">
-                <span class="student-grade">${student.grade}</span>
-                ${student.name}
+                <span class="student-grade">${escHtml(String(student.grade))}</span>
+                ${escHtml(student.name)}
             </div>
         `;
     }
@@ -1810,7 +1838,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             html += `
                 <div class="overview-course-section">
-                    <div class="overview-course-title">${course.name}</div>
+                    <div class="overview-course-title">${escHtml(course.name)}</div>
                     <div class="overview-groups-grid">
             `;
 
@@ -1823,7 +1851,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 html += `
                     <div class="overview-group-card">
-                        <div class="overview-group-name">${groupName}</div>
+                        <div class="overview-group-name">${escHtml(groupName)}</div>
                         <div class="overview-students-list">
                 `;
 
@@ -1833,8 +1861,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     groupStudents.forEach(student => {
                         html += `
                             <div class="overview-student-item">
-                                <span class="student-grade">${student.grade}</span>
-                                ${student.name}
+                                <span class="student-grade">${escHtml(String(student.grade))}</span>
+                                ${escHtml(student.name)}
                             </div>
                         `;
                     });
@@ -2133,12 +2161,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const opacity = isFull ? '0.5' : '1';
 
             html += `
-                <div class="course-block" 
+                <div class="course-block"
                      draggable="${!isFull}"
                      data-course-id="${course.id}"
-                     data-course-name="${course.name}"
+                     data-course-name="${escHtml(course.name)}"
                      style="opacity: ${opacity}">
-                    <div class="course-block-header">${course.name}</div>
+                    <div class="course-block-header">${escHtml(course.name)}</div>
                     <div class="course-block-number">已排/總時數: ${usedBlocks} / ${maxHours}</div>
                 </div>
             `;
@@ -2185,7 +2213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                  data-slot-key="${slotKey}"
                                  data-item-index="${index}">
                                 <button class="btn-remove" onclick="removeFromSchedule('${slotKey}', ${index})">✖</button>
-                                <div class="course-subject">${course.name}</div>
+                                <div class="course-subject">${escHtml(course.name)}</div>
                             </div>
                         `;
                     }
@@ -2514,9 +2542,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         let teacherDisplay = '未排';
                         if (Array.isArray(teacherData)) {
                             // Join with <br> to ensure one teacher per line
-                            teacherDisplay = teacherData.filter(t => t && t !== '').join('<br>') || '未排';
+                            teacherDisplay = teacherData.filter(t => t && t !== '').map(escHtml).join('<br>') || '未排';
                         } else if (teacherData) {
-                            teacherDisplay = teacherData;
+                            teacherDisplay = escHtml(teacherData);
                         }
 
                         // 如果只有一個區塊，讓它跨兩欄
@@ -2524,16 +2552,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const spanClass = isSingleBlock ? 'span-2' : '';
 
                         // 整合模式：若群組名稱與課程名稱相同，則不顯示群組名稱
-                        const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${groupName}</span>`;
+                        const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${escHtml(groupName)}</span>`;
 
                         if (isClassroomIntegrated) {
                             // Classroom Integrated Mode: Show only course, teacher, room
                             html += `
                                         <div class="master-group-block classroom-integrated ${spanClass}">
-                                            <div class="master-group-header">${course.name} ${displayGroupName}</div>
+                                            <div class="master-group-header">${escHtml(course.name)} ${displayGroupName}</div>
                                             <div class="master-group-info-vertical">
                                                 <div class="master-info-row">👨‍🏫 ${teacherDisplay}</div>
-                                                <div class="master-info-row">🏠 ${details.room || '待訂'}</div>
+                                                <div class="master-info-row">🏠 ${escHtml(details.room || '待訂')}</div>
                                             </div>
                                         </div>
                                     `;
@@ -2561,26 +2589,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const studentNames = groupStudents.map(studentId => {
                                 const student = students.find(s => s.id === studentId);
-                                return student ? `${student.grade} ${student.name}` : '';
+                                return student ? `${escHtml(String(student.grade))} ${escHtml(student.name)}` : '';
                             }).filter(name => name);
 
                             const isOverridden = !!override;
                             const blockId = `block-${slotKey}-${course.id}-${groupName}`;
 
                             // 若群組名稱與課程名稱相同，則不顯示群組名稱
-                            const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${groupName}</span>`;
+                            const displayGroupName = groupName === course.name ? '' : `<span style="font-size:0.8em">${escHtml(groupName)}</span>`;
 
                             html += `
                                         <div class="master-group-block ${spanClass}" id="${blockId}">
                                             <div class="master-group-header">
-                                                ${course.name} ${displayGroupName}
-                                                <span class="btn-edit-override ${isOverridden ? 'active' : ''}" 
-                                                      onclick="openStudentOverrideModal('${slotKey}', ${course.id}, '${groupName}')"
+                                                ${escHtml(course.name)} ${displayGroupName}
+                                                <span class="btn-edit-override ${isOverridden ? 'active' : ''}"
+                                                      onclick="openStudentOverrideModal('${slotKey}', ${course.id}, '${escHtml(groupName)}')"
                                                       title="編輯此時段學生名單">✎</span>
                                             </div>
                                             <div class="master-group-info-vertical">
                                                 <div class="master-info-row">👨‍🏫 ${teacherDisplay}</div>
-                                                <div class="master-info-row">🏠 ${details.room || '待訂'}</div>
+                                                <div class="master-info-row">🏠 ${escHtml(details.room || '待訂')}</div>
                                             </div>
                                             ${studentNames.length > 0 ? `
                                                 <div class="master-student-list-vertical">

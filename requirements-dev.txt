@@ -1,0 +1,4 @@
+# 開發與測試環境依賴（不需要打包進 exe）
+-r requirements.txt
+pytest==8.2.2
+pytest-flask==1.3.0
