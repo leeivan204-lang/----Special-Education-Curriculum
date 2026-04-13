@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check script.js)",
+      "Bash(pip install:*)",
+      "mcp__Claude_Preview__preview_start",
+      "WebFetch(domain:leeivan204-lang.github.io)"
+    ]
+  }
+}

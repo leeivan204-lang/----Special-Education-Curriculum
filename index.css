@@ -613,6 +613,7 @@ body {
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    position: relative;
 }
 
 .modal-header {
@@ -3152,5 +3153,263 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* ===== Snackbar 吐司通知 ===== */
+#snackbar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #323232;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 99999;
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    max-width: 480px;
+    white-space: nowrap;
+}
+#snackbar.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+.snackbar-undo {
+    background: none;
+    border: none;
+    color: #4fc3f7;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.snackbar-undo:hover { color: #81d4fa; }
+
+/* ===== Modal 行內錯誤訊息 ===== */
+.modal-error-msg {
+    display: none;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    color: #dc2626;
+    font-size: 0.875rem;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+/* Modal footer 固定不隨內容滾動 */
+.modal-footer { flex-shrink: 0; }
+
+/* ===== 課表格節次計數徽章 ===== */
+.slot-count-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    pointer-events: none;
+    line-height: 1;
+}
+.slot-count-badge.full {
+    color: #ef4444;
+    font-weight: 700;
+}
+.schedule-slot { position: relative; }
+
+/* ===== 列表搜尋框 ===== */
+.list-search-input {
+    width: 100%;
+    padding: 6px 10px 6px 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    outline: none;
+    background: #f8f9fa url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+}
+.list-search-input:focus { border-color: var(--primary-color); background-color: #fff; }
+
+/* ===== 批次新增學生 ===== */
+.batch-add-area {
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: #fafafa;
+}
+.batch-add-area textarea {
+    width: 100%;
+    min-height: 90px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.85rem;
+    resize: vertical;
+    font-family: inherit;
+}
+.batch-add-area .batch-hint {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+/* ===== Modal 放棄變更確認列 ===== */
+.modal-discard-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff7ed;
+    border-top: 2px solid #f97316;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.875rem;
+    color: #9a3412;
+    z-index: 10;
+    border-radius: 0 0 8px 8px;
+}
+.modal-discard-bar span { flex: 1; }
+.btn-discard-confirm {
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+.btn-discard-confirm:hover { background: #dc2626; }
+.btn-discard-cancel {
+    background: #e5e7eb;
+    color: #374151;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+.btn-discard-cancel:hover { background: #d1d5db; }
+
+/* ===== P2: 手機響應式版面 ===== */
+@media (max-width: 768px) {
+    /* 主版面改為縱向 */
+    .app-container {
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 100vh;
+    }
+
+    /* 側邊欄橫向導覽列 */
+    .sidebar {
+        width: 100% !important;
+        height: auto !important;
+        flex-direction: column !important;
+        padding: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        overflow-y: visible;
+    }
+    .sidebar-header { display: none; }
+    .sidebar-nav {
+        flex-direction: row !important;
+        flex-wrap: wrap;
+        gap: 2px;
+        padding: 6px 8px;
+        overflow-x: auto;
+    }
+    .sidebar-nav .nav-btn {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    .nav-btn .icon { display: none; }
+    .nav-utility-item { display: none !important; }
+    .sidebar .version-info,
+    .sidebar .sidebar-divider,
+    .sidebar hr,
+    #save-status-indicator { display: none !important; }
+    /* Compact cloud backup and logout in the nav row */
+    #btn-cloud-backup, #btn-logout {
+        flex: 0 0 auto;
+        padding: 5px 8px !important;
+        font-size: 0.75rem !important;
+        white-space: nowrap;
+    }
+
+    .main-content {
+        padding: 0.75rem;
+        flex: 1;
+    }
+
+    /* 課表格 — 水平捲動 */
+    .schedule-grid-wrapper,
+    .schedule-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .schedule-grid,
+    table.schedule-table {
+        min-width: 560px;
+    }
+
+    /* 課程池橫排捲動 */
+    .course-pool {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        padding-bottom: 6px;
+    }
+    .course-block { flex-shrink: 0; }
+
+    /* Modal 全屏 */
+    .modal-content {
+        width: 96vw;
+        max-width: 96vw;
+        max-height: 90vh;
+        margin: 5vh auto;
+        overflow-y: auto;
+    }
+
+    /* 學生/教師卡片 */
+    .student-card, .teacher-card {
+        padding: 8px 10px;
+        font-size: 0.9rem;
+    }
+
+    /* 表單 */
+    .form-group label { font-size: 0.85rem; }
+    .form-control { font-size: 0.9rem; }
+
+    /* view-header 排列 */
+    .view-header {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .view-header h2 { font-size: 1.1rem; }
+
+    /* 按鈕縮小 */
+    .btn-primary, .btn-secondary {
+        padding: 6px 10px;
+        font-size: 0.82rem;
+    }
+
+    /* 搜尋框 */
+    .list-search-input {
+        font-size: 0.85rem;
     }
 }

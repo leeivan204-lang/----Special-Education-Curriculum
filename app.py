@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import sys
 import tempfile
@@ -131,6 +132,13 @@ def login():
 
 CURRENT_SCHEMA_VERSION = 1
 
+# 允許的 user_id 字元：英數字、中文、底線、連字號、點（最長 64 字元）
+_VALID_USER_ID_RE = re.compile(r'^[\w\u4e00-\u9fff.\-]{1,64}$')
+
+def is_valid_user_id(user_id: str) -> bool:
+    """防止路徑穿越攻擊：確保 user_id 只含安全字元。"""
+    return bool(user_id and _VALID_USER_ID_RE.match(user_id))
+
 def migrate_data(data):
     """將舊版 JSON 結構升級至最新版本，保持向後相容。"""
     version = data.get('schemaVersion', 0)
@@ -147,6 +155,8 @@ def migrate_data(data):
 # API: Get Data
 @app.route('/api/data/<user_id>', methods=['GET'])
 def get_data(user_id):
+    if not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
     file_path = os.path.join(DATA_DIR, f"{user_id}.json")
 
     try:
@@ -164,6 +174,8 @@ def get_data(user_id):
 # API: Save Data
 @app.route('/api/data/<user_id>', methods=['POST'])
 def save_data(user_id):
+    if not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
     req_data = request.json
     
     # Check if this is a legacy request (direct data) or enveloped request ({data: ..., lastSyncedTimestamp: ...})
