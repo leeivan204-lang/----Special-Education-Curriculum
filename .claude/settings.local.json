@@ -4,7 +4,11 @@
       "Bash(node --check script.js)",
       "Bash(pip install:*)",
       "mcp__Claude_Preview__preview_start",
-      "WebFetch(domain:leeivan204-lang.github.io)"
+      "WebFetch(domain:leeivan204-lang.github.io)",
+      "Bash(grep -oE '#[0-9a-fA-F]{3,6}' \"D:\\\\特教課表Special Education Curriculum\\\\.claude\\\\worktrees\\\\busy-ritchie\\\\index.css\")",
+      "Bash(mv /tmp/app_clean.py \"D:\\\\特教課表Special Education Curriculum\\\\.claude\\\\worktrees\\\\busy-ritchie\\\\app.py\")",
+      "Bash(python -m pytest tests/test_backend_api.py -v)",
+      "Bash(python -m unittest tests.test_backend_api -v)"
     ]
   }
 }

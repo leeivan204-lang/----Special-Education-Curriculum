@@ -139,5 +139,62 @@ class TestBackendAPI(unittest.TestCase):
         client1.disconnect()
         client2.disconnect()
 
+    # --- 輸入驗證：路徑穿越防護 ---
+
+    def test_invalid_user_id_rejected(self):
+        """測試非法 user_id 被拒絕（路徑穿越攻擊防護）"""
+        bad_ids = [
+            '../etc/passwd',
+            '..\\windows\\system32',
+            'a' * 65,          # 超過 64 字元上限
+            'foo/bar',
+            '',
+        ]
+        for bad_id in bad_ids:
+            resp = self.app.get(f'/api/data/{bad_id}')
+            self.assertIn(resp.status_code, [400, 404], f"Expected 400/404 for id={bad_id!r}, got {resp.status_code}")
+
+    def test_valid_user_ids_accepted(self):
+        """測試合法 user_id 被接受（含中文）"""
+        good_ids = ['abc', 'user_1', '王小明', 'test.user-01']
+        for gid in good_ids:
+            resp = self.app.get(f'/api/data/{gid}')
+            self.assertEqual(resp.status_code, 200, f"Expected 200 for id={gid!r}, got {resp.status_code}")
+
+    # --- 資料遷移 ---
+
+    def test_schema_migration_v0_to_v1(self):
+        """測試 schemaVersion 自動升級"""
+        # Write v0 data (no schemaVersion)
+        v0_data = {'timestamp': 999, 'courses': []}
+        with open(self.data_path, 'w') as f:
+            json.dump(v0_data, f)
+
+        resp = self.app.get(f'/api/data/{self.test_user_id}')
+        data = resp.json['data']
+        self.assertEqual(data['schemaVersion'], 1)
+
+    # --- 原子寫入 ---
+
+    def test_atomic_write_creates_file(self):
+        """測試原子寫入成功建立檔案"""
+        payload = {
+            'data': {'timestamp': 111, 'test': True},
+            'lastSyncedTimestamp': 0,
+            'force': True
+        }
+        resp = self.app.post(f'/api/data/{self.test_user_id}', json=payload)
+        self.assertEqual(resp.status_code, 200)
+
+        # Verify file exists and is valid JSON
+        with open(self.data_path, 'r', encoding='utf-8') as f:
+            saved = json.load(f)
+        self.assertEqual(saved['timestamp'], 111)
+        self.assertTrue(saved['test'])
+
+        # Verify no .tmp files left behind
+        tmp_files = [f for f in os.listdir(DATA_DIR) if f.endswith('.tmp')]
+        self.assertEqual(len(tmp_files), 0, f"Leftover .tmp files: {tmp_files}")
+
 if __name__ == '__main__':
     unittest.main()

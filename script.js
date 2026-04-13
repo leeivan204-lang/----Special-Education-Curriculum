@@ -1,3 +1,28 @@
+/**
+ * 特教課表管理系統 — 前端核心 (script.js)
+ *
+ * ┌─────────────────────────────────────────────────────┐
+ * │  TABLE OF CONTENTS                                  │
+ * ├─────────────────────────────────────────────────────┤
+ * │  §1   Google OAuth 設定 & 狀態          (~L20)      │
+ * │  §2   通用工具 (debounce, store, snackbar) (~L102)  │
+ * │  §3   Login & State Management          (~L177)     │
+ * │  §4   DOM Elements & Constants          (~L783)     │
+ * │  §5   Event Listeners & Init            (~L842)     │
+ * │  §6   Data Backup & Restore             (~L1048)    │
+ * │  §7   Course Functions (CRUD, render)   (~L1354)    │
+ * │  §8   Student Functions (CRUD, render)  (~L1745)    │
+ * │  §9   Teacher Functions (CRUD, render)  (~L1898)    │
+ * │  §10  Grouping Functions                (~L2045)    │
+ * │  §11  Schedule Drag & Drop              (~L2559)    │
+ * │  §12  Touch Drag & Drop                 (~L2700)    │
+ * │  §13  Master Schedule Functions         (~L2995)    │
+ * │  §14  Schedule Generation (Student)     (~L3404)    │
+ * │  §15  Print / PDF Schedule              (~L4590)    │
+ * │  §16  Word Export Bindings              (~L4699)    │
+ * │  §17  Test Exports                      (~L5427)    │
+ * └─────────────────────────────────────────────────────┘
+ */
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化簡易課表視圖結構：確保有 course-blocks-pool 和 schedule-container
     const scheduleView = document.getElementById('schedule-view');
@@ -99,6 +124,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== 全域 UI 工具函式 =====
 
     // --- Snackbar（可復原通知）---
+    // --- 通用工具 ---
+    function debounce(fn, ms) {
+        let id;
+        return function (...args) { clearTimeout(id); id = setTimeout(() => fn.apply(this, args), ms); };
+    }
+
+    // --- Centralized Data Store ---
+    const store = {
+        get(key, fallback = null) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw !== null ? JSON.parse(raw) : fallback;
+            } catch { return fallback; }
+        },
+        set(key, value) {
+            localStorage.setItem(key, JSON.stringify(value));
+        },
+        remove(key) {
+            localStorage.removeItem(key);
+        },
+        getRaw(key) {
+            return localStorage.getItem(key);
+        },
+        setRaw(key, value) {
+            localStorage.setItem(key, String(value));
+        }
+    };
+
     let _snackbarTimer = null;
     function showSnackbar(message, undoCallback = null, duration = 5000) {
         let sb = document.getElementById('snackbar');
@@ -304,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'studentManualEntries', 'slotOverrides',
             'lastSavedTimestamp', 'lastCloudBackupTimestamp'
         ];
-        APP_STORAGE_KEYS.forEach(k => localStorage.removeItem(k));
+        APP_STORAGE_KEYS.forEach(k => store.remove(k));
     }
 
     async function handleLogin() {
@@ -498,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (bestRemoteData) {
                 // We have a candidate from remote (Server or Cloud)
-                const localTimestamp = localStorage.getItem('lastSavedTimestamp');
+                const localTimestamp = store.getRaw('lastSavedTimestamp');
 
                 // If we have valid local data
                 if (courses.length > 0) {
@@ -649,16 +702,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function syncLocalStorage(data, reload = false) {
         if (!data) return;
-        localStorage.setItem('courses', JSON.stringify(data.courses || []));
-        localStorage.setItem('students', JSON.stringify(data.students || []));
-        localStorage.setItem('teachers', JSON.stringify(data.teachers || []));
-        localStorage.setItem('assignments', JSON.stringify(data.assignments || {}));
-        localStorage.setItem('scheduleData', JSON.stringify(data.scheduleData || {}));
-        localStorage.setItem('teacherPartTimeMarks', JSON.stringify(data.teacherPartTimeMarks || {}));
-        localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle || { prefix: '', year: '', semester: '', suffix: '' }));
-        localStorage.setItem('implementationDates', JSON.stringify(data.implementationDates || { startDate: '', endDate: '' }));
-        localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries || {}));
-        localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides || {}));
+        store.set('courses', data.courses || []);
+        store.set('students', data.students || []);
+        store.set('teachers', data.teachers || []);
+        store.set('assignments', data.assignments || {});
+        store.set('scheduleData', data.scheduleData || {});
+        store.set('teacherPartTimeMarks', data.teacherPartTimeMarks || {});
+        store.set('scheduleTitle', data.scheduleTitle || { prefix: '', year: '', semester: '', suffix: '' });
+        store.set('implementationDates', data.implementationDates || { startDate: '', endDate: '' });
+        store.set('studentManualEntries', data.studentManualEntries || {});
+        store.set('slotOverrides', data.slotOverrides || {});
 
         if (reload) {
             window.location.reload();
@@ -699,24 +752,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- State Management ---
-    let courses = JSON.parse(localStorage.getItem('courses')) || [];
-    let students = JSON.parse(localStorage.getItem('students')) || [];
-    let teachers = JSON.parse(localStorage.getItem('teachers')) || [];
-    let assignments = JSON.parse(localStorage.getItem('assignments')) || {}; // { courseId: { groupName: [studentId, ...] } }
-    let scheduleData = JSON.parse(localStorage.getItem('scheduleData')) || {}; // { 'monday-1': { courseId, groupName, blockIndex }, ... }
-    let teacherPartTimeMarks = JSON.parse(localStorage.getItem('teacherPartTimeMarks')) || {}; // { teacherName: { 'monday-1': true, ... } }
-    let scheduleTitle = JSON.parse(localStorage.getItem('scheduleTitle')) || {
+    let courses = store.get('courses', []);
+    let students = store.get('students', []);
+    let teachers = store.get('teachers', []);
+    let assignments = store.get('assignments', {}); // { courseId: { groupName: [studentId, ...] } }
+    let scheduleData = store.get('scheduleData', {}); // { 'monday-1': { courseId, groupName, blockIndex }, ... }
+    let teacherPartTimeMarks = store.get('teacherPartTimeMarks', {}); // { teacherName: { 'monday-1': true, ... } }
+    let scheduleTitle = store.get('scheduleTitle', {
         prefix: '',
         year: '',
         semester: '',
         suffix: ''
-    };
-    let implementationDates = JSON.parse(localStorage.getItem('implementationDates')) || {
+    });
+    let implementationDates = store.get('implementationDates', {
         startDate: '',
         endDate: ''
-    };
-    let studentManualEntries = JSON.parse(localStorage.getItem('studentManualEntries')) || {}; // { studentId: { 'monday-1': 'text', ... } }
-    let slotOverrides = JSON.parse(localStorage.getItem('slotOverrides')) || {}; // { slotKey: { courseId: { groupName: [studentId, ...] } } }
+    });
+    let studentManualEntries = store.get('studentManualEntries', {}); // { studentId: { 'monday-1': 'text', ... } }
+    let slotOverrides = store.get('slotOverrides', {}); // { slotKey: { courseId: { groupName: [studentId, ...] } } }
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec';
 
     // Sanitize schedule data to remove invalid entries
@@ -747,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (hasChanges) {
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
         }
     }
@@ -811,6 +864,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeScheduleTitle();
     renderMasterSchedule();
 
+    // --- 搜尋框 debounce 綁定 ---
+    const _debouncedStudentSearch = debounce(renderStudentList, 200);
+    const _debouncedCourseSearch = debounce(renderCourseList, 200);
+    const _debouncedTeacherSearch = debounce(renderTeacherList, 200);
+    document.getElementById('student-search')?.addEventListener('input', _debouncedStudentSearch);
+    document.getElementById('course-search')?.addEventListener('input', _debouncedCourseSearch);
+    document.getElementById('teacher-search')?.addEventListener('input', _debouncedTeacherSearch);
+
     // --- Event Listeners ---
 
     // 初始化課表標題輸入監聽
@@ -829,7 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 input.value = scheduleTitle[key];
                 input.addEventListener('input', (e) => {
                     scheduleTitle[key] = e.target.value;
-                    localStorage.setItem('scheduleTitle', JSON.stringify(scheduleTitle));
+                    store.set('scheduleTitle', scheduleTitle);
                     saveAllDataToServer();
                 });
             }
@@ -843,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startDateInput.value = implementationDates.startDate;
             startDateInput.addEventListener('input', (e) => {
                 implementationDates.startDate = e.target.value;
-                localStorage.setItem('implementationDates', JSON.stringify(implementationDates));
+                store.set('implementationDates', implementationDates);
                 saveAllDataToServer();
             });
         }
@@ -852,7 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
             endDateInput.value = implementationDates.endDate;
             endDateInput.addEventListener('input', (e) => {
                 implementationDates.endDate = e.target.value;
-                localStorage.setItem('implementationDates', JSON.stringify(implementationDates));
+                store.set('implementationDates', implementationDates);
                 saveAllDataToServer();
             });
         }
@@ -1000,7 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     course.groups.forEach(groupName => {
                         assignments[currentGroupingCourseId][groupName] = [];
                     });
-                    localStorage.setItem('assignments', JSON.stringify(assignments));
+                    store.set('assignments', assignments);
                 }
 
                 // Re-render the workspace
@@ -1069,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!skipConfirm) showSnackbar('備份請求已發送至 Google Cloud！');
 
             // Update Cloud Backup Timestamp
-            localStorage.setItem('lastCloudBackupTimestamp', new Date().getTime());
+            store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
             updateCloudSyncStatus();
 
             return true;
@@ -1095,8 +1156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateCloudSyncStatus() {
         if (!btnCloudBackup) return;
 
-        const localTs = parseInt(localStorage.getItem('lastSavedTimestamp') || '0');
-        const cloudTs = parseInt(localStorage.getItem('lastCloudBackupTimestamp') || '0');
+        const localTs = parseInt(store.getRaw('lastSavedTimestamp') || '0');
+        const cloudTs = parseInt(store.getRaw('lastCloudBackupTimestamp') || '0');
 
         const iconSpan = btnCloudBackup.querySelector('.icon');
 
@@ -1127,7 +1188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Let's check getFullDataSnapshot.
         // Assuming it does, we just update status here.
         // We'll manually set the local TS in localStorage if not set, to ensure comparison works
-        localStorage.setItem('lastSavedTimestamp', Date.now());
+        store.setRaw('lastSavedTimestamp', Date.now());
         updateCloudSyncStatus();
     };
 
@@ -1231,11 +1292,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.portableData) {
         console.log('Portable data detected:', window.portableData);
 
-        const localTimestampStr = localStorage.getItem('lastSavedTimestamp');
+        const localTimestampStr = store.getRaw('lastSavedTimestamp');
         const portableTimestampStr = window.portableData.timestamp;
 
         // Has local data?
-        const hasLocalData = localStorage.getItem('courses') && JSON.parse(localStorage.getItem('courses')).length > 0;
+        const hasLocalData = store.getRaw('courses') && store.get('courses', []).length > 0;
 
         if (!hasLocalData) {
             console.log('No local data found. Auto-importing portable data...');
@@ -1272,16 +1333,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             schemaVersion: SCHEMA_VERSION,
             timestamp: Date.now(), // UTC 毫秒整數，避免時區格式差異造成比對錯誤
-            courses: JSON.parse(localStorage.getItem('courses') || '[]'),
-            teachers: JSON.parse(localStorage.getItem('teachers') || '[]'),
-            students: JSON.parse(localStorage.getItem('students') || '[]'),
-            scheduleData: JSON.parse(localStorage.getItem('scheduleData') || '{}'),
-            assignments: JSON.parse(localStorage.getItem('assignments') || '{}'),
-            implementationDates: JSON.parse(localStorage.getItem('implementationDates') || '{}'),
-            teacherPartTimeMarks: JSON.parse(localStorage.getItem('teacherPartTimeMarks') || '{}'),
-            studentManualEntries: JSON.parse(localStorage.getItem('studentManualEntries') || '{}'),
-            slotOverrides: JSON.parse(localStorage.getItem('slotOverrides') || '{}'),
-            scheduleTitle: JSON.parse(localStorage.getItem('scheduleTitle') || '{}')
+            courses: store.get('courses', []),
+            teachers: store.get('teachers', []),
+            students: store.get('students', []),
+            scheduleData: store.get('scheduleData', {}),
+            assignments: store.get('assignments', {}),
+            implementationDates: store.get('implementationDates', {}),
+            teacherPartTimeMarks: store.get('teacherPartTimeMarks', {}),
+            studentManualEntries: store.get('studentManualEntries', {}),
+            slotOverrides: store.get('slotOverrides', {}),
+            scheduleTitle: store.get('scheduleTitle', {})
         };
     }
 
@@ -1292,19 +1353,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Restore Data
     function restoreData(data, reload = true) {
-        if (data.courses) localStorage.setItem('courses', JSON.stringify(data.courses));
-        if (data.teachers) localStorage.setItem('teachers', JSON.stringify(data.teachers));
-        if (data.students) localStorage.setItem('students', JSON.stringify(data.students));
-        if (data.scheduleData) localStorage.setItem('scheduleData', JSON.stringify(data.scheduleData));
-        if (data.assignments) localStorage.setItem('assignments', JSON.stringify(data.assignments));
-        if (data.implementationDates) localStorage.setItem('implementationDates', JSON.stringify(data.implementationDates));
-        if (data.teacherPartTimeMarks) localStorage.setItem('teacherPartTimeMarks', JSON.stringify(data.teacherPartTimeMarks));
-        if (data.studentManualEntries) localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries));
-        if (data.slotOverrides) localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides));
-        if (data.scheduleTitle) localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle));
+        if (data.courses) store.set('courses', data.courses);
+        if (data.teachers) store.set('teachers', data.teachers);
+        if (data.students) store.set('students', data.students);
+        if (data.scheduleData) store.set('scheduleData', data.scheduleData);
+        if (data.assignments) store.set('assignments', data.assignments);
+        if (data.implementationDates) store.set('implementationDates', data.implementationDates);
+        if (data.teacherPartTimeMarks) store.set('teacherPartTimeMarks', data.teacherPartTimeMarks);
+        if (data.studentManualEntries) store.set('studentManualEntries', data.studentManualEntries);
+        if (data.slotOverrides) store.set('slotOverrides', data.slotOverrides);
+        if (data.scheduleTitle) store.set('scheduleTitle', data.scheduleTitle);
         // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
 
-        localStorage.setItem('lastSavedTimestamp', data.timestamp || Date.now());
+        store.setRaw('lastSavedTimestamp', data.timestamp || Date.now());
 
         // Sync restored data to server
         saveAllDataToServer();
@@ -1630,7 +1691,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveCourses() {
-        localStorage.setItem('courses', JSON.stringify(courses));
+        store.set('courses', courses);
         saveAllDataToServer();
     }
 
@@ -1821,7 +1882,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveStudents() {
-        localStorage.setItem('students', JSON.stringify(students));
+        store.set('students', students);
         saveAllDataToServer();
     }
 
@@ -1926,7 +1987,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveTeachers() {
-        localStorage.setItem('teachers', JSON.stringify(teachers));
+        store.set('teachers', teachers);
         saveAllDataToServer();
     }
 
@@ -2036,7 +2097,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Initializing new assignments for course:', courseId);
             assignments[courseId] = {};
             course.groups.forEach(g => assignments[courseId][g] = []);
-            localStorage.setItem('assignments', JSON.stringify(assignments));
+            store.set('assignments', assignments);
         } else {
             // Validate existing structure and clean up if needed
             let needsCleanup = false;
@@ -2066,7 +2127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (needsCleanup) {
                 console.log('Cleaned up assignments structure');
-                localStorage.setItem('assignments', JSON.stringify(assignments));
+                store.set('assignments', assignments);
             }
         }
         // Render Group Columns
@@ -2343,7 +2404,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Save and Re-render
-        localStorage.setItem('assignments', JSON.stringify(assignments));
+        store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
         renderMasterSchedule();
@@ -2371,7 +2432,7 @@ document.addEventListener('DOMContentLoaded', () => {
             courseAssignments[group] = courseAssignments[group].filter(id => id !== studentId);
         });
 
-        localStorage.setItem('assignments', JSON.stringify(assignments));
+        store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
         renderMasterSchedule();
@@ -2876,7 +2937,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Save and re-render
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
             renderSchedule();
             renderCourseBlocks();
@@ -2896,7 +2957,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete scheduleData[slotKey];
             }
 
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
             renderSchedule();
             renderCourseBlocks();
@@ -4032,7 +4093,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        localStorage.setItem('studentManualEntries', JSON.stringify(studentManualEntries));
+        store.set('studentManualEntries', studentManualEntries);
         generateStudentSchedules();
         closeModal();
         saveAllDataToServer();
@@ -4203,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay('正在更新課表...');
 
         // Save to localStorage
-        localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+        store.set('slotOverrides', slotOverrides);
 
         // Force re-render with loading feedback
         setTimeout(() => {
@@ -4305,7 +4366,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete slotOverrides[slotKey];
             }
 
-            localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+            store.set('slotOverrides', slotOverrides);
             saveAllDataToServer();
 
             // Refresh with delay
@@ -4524,7 +4585,7 @@ document.addEventListener('DOMContentLoaded', () => {
         teacherPartTimeMarks[teacherName][slotKey] = !teacherPartTimeMarks[teacherName][slotKey];
 
         // Save to localStorage
-        localStorage.setItem('teacherPartTimeMarks', JSON.stringify(teacherPartTimeMarks));
+        store.set('teacherPartTimeMarks', teacherPartTimeMarks);
 
         // Regenerate teacher schedules to reflect the change
         generateTeacherSchedules();
