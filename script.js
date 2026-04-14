@@ -612,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (useLocal) {
                             console.log('User chose Local. Uploading to server...');
-                            await saveAllDataToServer();
+                            await saveAllDataToServer(true); // force: 使用者明確選擇覆蓋伺服器
                             return; // Done, kept local
                         } else {
                             console.log('User chose Remote. Overwriting local...');
@@ -648,16 +648,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (userWantsToImport) {
                         console.log('User chose to import local data. Migrating to server...');
-                        await saveAllDataToServer();
+                        await saveAllDataToServer(true); // force: 初次建立帳號
                     } else {
                         console.log('User chose fresh start. Resetting state...');
                         resetState();
-                        await saveAllDataToServer();
+                        await saveAllDataToServer(true); // force: 初次建立帳號
                         refreshAllViews();
                     }
                 } else {
                     console.log('No local data. Starting fresh.');
-                    await saveAllDataToServer();
+                    await saveAllDataToServer(true); // force: 初次建立帳號
                 }
             }
 
@@ -1659,8 +1659,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         store.setRaw('lastSavedTimestamp', data.timestamp || Date.now());
 
-        // Sync restored data to server
-        saveAllDataToServer();
+        // Sync restored data to server（使用者主動匯入，強制覆蓋）
+        saveAllDataToServer(true);
 
         if (reload) {
             showSnackbar('資料載入成功！網頁將自動重新整理。');
@@ -2734,16 +2734,18 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDirty = false;
         modal.style.display = 'none';
         modalConfirm.onclick = null;
-        const clearBtn = modal.querySelector('.btn-clear-override');
+        const modalContent = modal.querySelector('.modal-content') || modal;
+        const clearBtn = modalContent.querySelector('.btn-clear-override');
         if (clearBtn) clearBtn.remove();
-        const discardBar = modal.querySelector('.modal-discard-bar');
+        const discardBar = modalContent.querySelector('.modal-discard-bar');
         if (discardBar) discardBar.remove();
     }
 
     function closeModal() {
         if (modalDirty) {
+            const modalContent = modal.querySelector('.modal-content') || modal;
             // Show inline discard confirmation bar if not already shown
-            if (modal.querySelector('.modal-discard-bar')) return;
+            if (modalContent.querySelector('.modal-discard-bar')) return;
             const bar = document.createElement('div');
             bar.className = 'modal-discard-bar';
             bar.innerHTML = `
@@ -2753,7 +2755,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             bar.querySelector('.btn-discard-confirm').onclick = forceCloseModal;
             bar.querySelector('.btn-discard-cancel').onclick = () => bar.remove();
-            modal.appendChild(bar);
+            modalContent.appendChild(bar);
             return;
         }
         forceCloseModal();
