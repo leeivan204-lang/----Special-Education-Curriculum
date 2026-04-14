@@ -208,6 +208,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ? 'http://localhost:3000/api'          // 以 file:// 開啟的靜態模式，回退到本地伺服器
         : `${window.location.origin}/api`;     // 相對路徑，自動跟隨當前 host
 
+    // 共用 HTTP headers（含 CSRF 防護）
+    const API_HEADERS = {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+
     // Initialize Socket.IO（連線 URL 跟隨 API_BASE 的 origin）
     const SOCKET_URL = (window.location.protocol === 'file:' || window.location.hostname === '')
         ? 'http://localhost:3000'
@@ -381,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Authenticate
             const loginResp = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: API_HEADERS,
                 body: JSON.stringify({ userId })
             });
             const loginResult = await loginResp.json();
@@ -628,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: API_HEADERS,
                 body: JSON.stringify(data)
             });
         } catch (e) { console.error('Error saving to custom server:', e); }
@@ -671,7 +677,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: API_HEADERS,
                 body: JSON.stringify(payload)
             });
 

@@ -75,6 +75,23 @@ def set_security_headers(response):
     response.headers['Content-Security-Policy'] = csp
     return response
 
+# --- CSRF 防護（自訂 Header 驗證） ---
+# 瀏覽器的同源政策保證跨站請求無法設定自訂 header
+# 因此只要驗證 X-Requested-With header 存在，即可防禦 CSRF
+CSRF_HEADER = 'X-Requested-With'
+CSRF_EXPECTED = 'XMLHttpRequest'
+
+@app.before_request
+def csrf_protect():
+    """對所有 POST/PUT/DELETE 請求驗證 CSRF header"""
+    if request.method in ('POST', 'PUT', 'DELETE'):
+        # 排除靜態檔案請求
+        if request.path.startswith('/api/'):
+            token = request.headers.get(CSRF_HEADER)
+            if token != CSRF_EXPECTED:
+                logger.warning(f"CSRF check failed for {request.method} {request.path} from {request.remote_addr}")
+                return jsonify({'success': False, 'message': 'CSRF validation failed'}), 403
+
 # Configuration
 PORT = 3000
 DATA_DIR = os.path.join(BASE_DIR, 'data')
@@ -101,7 +118,12 @@ def serve_static(path):
 def on_join(data):
     user_id = data.get('userId')
     sid = request.sid
-    
+
+    # 驗證 user_id 格式
+    if not user_id or not is_valid_user_id(user_id):
+        emit('error', {'message': 'Invalid user ID'})
+        return
+
     if user_id:
         join_room(user_id)
         
