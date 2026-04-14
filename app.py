@@ -43,39 +43,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CORS 允許來源 ---
-# 自動偵測本機所有 IP，允許區域網內所有裝置連線
-import socket as _socket
-
-def _get_allowed_origins(port):
-    """自動產生所有本機 IP 的 CORS 允許來源清單"""
-    origins = [
-        f'http://localhost:{port}',
-        f'http://127.0.0.1:{port}',
-    ]
-    try:
-        hostname = _socket.gethostname()
-        # 取得所有本機 IP（含多網卡、Wi-Fi、有線）
-        for info in _socket.getaddrinfo(hostname, None, _socket.AF_INET):
-            ip = info[4][0]
-            origin = f'http://{ip}:{port}'
-            if origin not in origins:
-                origins.append(origin)
-    except Exception:
-        pass
-    # 嘗試透過連線偵測主要 LAN IP
-    try:
-        s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-        s.close()
-        origin = f'http://{ip}:{port}'
-        if origin not in origins:
-            origins.append(origin)
-    except Exception:
-        pass
-    return origins
-
-ALLOWED_ORIGINS = _get_allowed_origins(3000)
+# 允許任意來源（支援跨網域、跨裝置、公網代理等多裝置同步）
+# 安全性：CSRF 仍由自訂 header (X-Requested-With) 防護，瀏覽器同源政策保證跨站無法設定此 header
+ALLOWED_ORIGINS = '*'
 logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)

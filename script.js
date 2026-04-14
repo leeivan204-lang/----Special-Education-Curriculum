@@ -2737,27 +2737,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalContent = modal.querySelector('.modal-content') || modal;
         const clearBtn = modalContent.querySelector('.btn-clear-override');
         if (clearBtn) clearBtn.remove();
-        const discardBar = modalContent.querySelector('.modal-discard-bar');
-        if (discardBar) discardBar.remove();
     }
 
     function closeModal() {
-        if (modalDirty) {
-            const modalContent = modal.querySelector('.modal-content') || modal;
-            // Show inline discard confirmation bar if not already shown
-            if (modalContent.querySelector('.modal-discard-bar')) return;
-            const bar = document.createElement('div');
-            bar.className = 'modal-discard-bar';
-            bar.innerHTML = `
-                <span>有未儲存的變更，確定要放棄？</span>
-                <button class="btn-discard-confirm">放棄變更</button>
-                <button class="btn-discard-cancel">繼續編輯</button>
-            `;
-            bar.querySelector('.btn-discard-confirm').onclick = forceCloseModal;
-            bar.querySelector('.btn-discard-cancel').onclick = () => bar.remove();
-            modalContent.appendChild(bar);
-            return;
-        }
         forceCloseModal();
     }
 
