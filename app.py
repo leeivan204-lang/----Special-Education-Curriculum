@@ -43,11 +43,40 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CORS 允許來源 ---
-# 僅允許本地端存取；若需開放其他主機，在此陣列中新增
-ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+# 自動偵測本機所有 IP，允許區域網內所有裝置連線
+import socket as _socket
+
+def _get_allowed_origins(port):
+    """自動產生所有本機 IP 的 CORS 允許來源清單"""
+    origins = [
+        f'http://localhost:{port}',
+        f'http://127.0.0.1:{port}',
+    ]
+    try:
+        hostname = _socket.gethostname()
+        # 取得所有本機 IP（含多網卡、Wi-Fi、有線）
+        for info in _socket.getaddrinfo(hostname, None, _socket.AF_INET):
+            ip = info[4][0]
+            origin = f'http://{ip}:{port}'
+            if origin not in origins:
+                origins.append(origin)
+    except Exception:
+        pass
+    # 嘗試透過連線偵測主要 LAN IP
+    try:
+        s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        origin = f'http://{ip}:{port}'
+        if origin not in origins:
+            origins.append(origin)
+    except Exception:
+        pass
+    return origins
+
+ALLOWED_ORIGINS = _get_allowed_origins(3000)
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 限制請求大小 5MB
