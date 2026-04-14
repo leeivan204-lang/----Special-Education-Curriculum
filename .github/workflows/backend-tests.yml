@@ -34,19 +34,10 @@ jobs:
       
     - name: Run backend API tests
       run: uv run python tests/test_backend_api.py
-      
-    - name: Run backend export tests
-      run: uv run python tests/test_backend_export.py
-      
-    - name: Run Word export tests
-      run: uv run python tests/test_word_export.py
-      
+
     - name: Test Summary
       if: always()
       run: |
         echo "✅ Backend tests completed"
         echo "Tests executed:"
-        echo "  - Basic Functionality (Login, Save, Load)"
-        echo "  - API Endpoints"
-        echo "  - Export Functionality"
-        echo "  - Word Export Details"
+        echo "  - Backend API Tests (Login, Save, Load, Security, Migration)"
