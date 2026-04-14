@@ -9,17 +9,24 @@ from app import app, socketio, DATA_DIR
 
 class TestBackendAPI(unittest.TestCase):
 
+    # CSRF header 用於所有 POST 請求
+    CSRF_HEADERS = {'X-Requested-With': 'XMLHttpRequest'}
+
     def setUp(self):
         """Setup test environment"""
         app.config['TESTING'] = True
         self.app = app.test_client()
         self.socketio = socketio.test_client(app, flask_test_client=self.app)
         self.test_user_id = "test_user_api"
-        
+
         # Clean up data dir before test
         self.data_path = os.path.join(DATA_DIR, f"{self.test_user_id}.json")
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
+
+    def _post_json(self, url, data):
+        """Helper: POST JSON with CSRF header"""
+        return self.app.post(url, json=data, headers=self.CSRF_HEADERS)
 
     def tearDown(self):
         """Clean up after test"""
@@ -31,13 +38,20 @@ class TestBackendAPI(unittest.TestCase):
     def test_login(self):
         """測試登入 API"""
         # Success
-        response = self.app.post('/api/login', json={'userId': self.test_user_id})
+        response = self._post_json('/api/login', {'userId': self.test_user_id})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['success'])
 
         # Failure (Missing ID)
-        response = self.app.post('/api/login', json={})
+        response = self._post_json('/api/login', {})
         self.assertEqual(response.status_code, 400)
+
+    def test_csrf_protection(self):
+        """測試 CSRF 防護：缺少 X-Requested-With header 應被拒絕"""
+        # POST without CSRF header → 403
+        response = self.app.post('/api/login', json={'userId': self.test_user_id})
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('CSRF', response.json.get('message', ''))
 
     def test_save_and_get_data(self):
         """測試資料儲存與讀取"""
@@ -53,7 +67,7 @@ class TestBackendAPI(unittest.TestCase):
             'lastSyncedTimestamp': 0,
             'force': True
         }
-        response = self.app.post(f'/api/data/{self.test_user_id}', json=payload)
+        response = self._post_json(f'/api/data/{self.test_user_id}', payload)
         self.assertEqual(response.status_code, 200)
 
         # Get Data Again (Should exist)
@@ -76,8 +90,8 @@ class TestBackendAPI(unittest.TestCase):
             'lastSyncedTimestamp': timestamp_client,
             'force': False
         }
-        response = self.app.post(f'/api/data/{self.test_user_id}', json=payload)
-        
+        response = self._post_json(f'/api/data/{self.test_user_id}', payload)
+
         # Expect Conflict (409)
         self.assertEqual(response.status_code, 409)
         self.assertFalse(response.json['success'])
@@ -85,7 +99,7 @@ class TestBackendAPI(unittest.TestCase):
 
         # 3. Try to save with SAME timestamp (force=False) -> Should Pass
         payload['lastSyncedTimestamp'] = timestamp_server
-        response = self.app.post(f'/api/data/{self.test_user_id}', json=payload)
+        response = self._post_json(f'/api/data/{self.test_user_id}', payload)
         self.assertEqual(response.status_code, 200)
 
     def test_websocket_notifications(self):
@@ -105,7 +119,7 @@ class TestBackendAPI(unittest.TestCase):
             'force': True,
             'socketId': 'sender_socket_id'
         }
-        self.app.post(f'/api/data/{self.test_user_id}', json=payload)
+        self._post_json(f'/api/data/{self.test_user_id}', payload)
 
         # 3. Verify 'data_updated' broadcast
         received = self.socketio.get_received()
@@ -183,7 +197,7 @@ class TestBackendAPI(unittest.TestCase):
             'lastSyncedTimestamp': 0,
             'force': True
         }
-        resp = self.app.post(f'/api/data/{self.test_user_id}', json=payload)
+        resp = self._post_json(f'/api/data/{self.test_user_id}', payload)
         self.assertEqual(resp.status_code, 200)
 
         # Verify file exists and is valid JSON
