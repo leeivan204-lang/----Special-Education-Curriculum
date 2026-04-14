@@ -327,4 +327,5 @@ if __name__ == '__main__':
     logger.info(f"Server is running at http://localhost:{PORT}")
     logger.info(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
     is_debug = os.environ.get('FLASK_DEBUG', '0') == '1'
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=is_debug, allow_unsafe_werkzeug=is_debug)
+    # allow_unsafe_werkzeug=True：此應用設計為本地/區網使用，Werkzeug 即可勝任
+    socketio.run(app, host='0.0.0.0', port=PORT, debug=is_debug, allow_unsafe_werkzeug=True)
