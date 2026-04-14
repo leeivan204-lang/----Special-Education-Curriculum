@@ -50,8 +50,30 @@ ALLOWED_ORIGINS = [
 ]
 
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 限制請求大小 5MB
 CORS(app, origins=ALLOWED_ORIGINS)
 socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+
+# --- 安全性 HTTP 標頭 ---
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    # Content-Security-Policy：限制資源來源
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://cdn.socket.io; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self' ws: wss: https://script.google.com https://accounts.google.com; "
+        "frame-src https://accounts.google.com; "
+        "img-src 'self' data:; "
+    )
+    response.headers['Content-Security-Policy'] = csp
+    return response
 
 # Configuration
 PORT = 3000
@@ -117,17 +139,43 @@ def on_disconnect():
             
         logger.info(f"Client {sid} disconnected from {user_id}. Remaining: {len(user_sockets.get(user_id, []))}")
 
+# --- 簡易速率限制（記憶體內，適用於單機部署） ---
+from collections import defaultdict
+import time as _time
+
+_rate_limit_store = defaultdict(list)  # ip -> [timestamps]
+RATE_LIMIT_WINDOW = 60   # 秒
+RATE_LIMIT_MAX = 30       # 每 IP 每分鐘最多 30 次請求
+
+def _check_rate_limit():
+    """回傳 True 表示超過限制"""
+    ip = request.remote_addr or 'unknown'
+    now = _time.time()
+    # 清理過期記錄
+    _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if now - t < RATE_LIMIT_WINDOW]
+    if len(_rate_limit_store[ip]) >= RATE_LIMIT_MAX:
+        return True
+    _rate_limit_store[ip].append(now)
+    return False
+
 # API: Login
 @app.route('/api/login', methods=['POST'])
 def login():
+    if _check_rate_limit():
+        return jsonify({'success': False, 'message': 'Too many requests'}), 429
+
     data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': 'Invalid request'}), 400
+
     user_id = data.get('userId')
 
     if not user_id:
         return jsonify({'success': False, 'message': 'User ID is required'}), 400
 
-    # In a real app, you'd check passwords here.
-    # We allow "Spe for u" or any ID for this local version.
+    if not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid user ID format'}), 400
+
     return jsonify({'success': True, 'message': 'Login successful'})
 
 CURRENT_SCHEMA_VERSION = 1
@@ -174,9 +222,13 @@ def get_data(user_id):
 # API: Save Data
 @app.route('/api/data/<user_id>', methods=['POST'])
 def save_data(user_id):
+    if _check_rate_limit():
+        return jsonify({'success': False, 'message': 'Too many requests'}), 429
     if not is_valid_user_id(user_id):
         return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
     req_data = request.json
+    if not req_data or not isinstance(req_data, dict):
+        return jsonify({'success': False, 'message': 'Invalid request body'}), 400
     
     # Check if this is a legacy request (direct data) or enveloped request ({data: ..., lastSyncedTimestamp: ...})
     if 'data' in req_data and 'lastSyncedTimestamp' in req_data:
@@ -252,4 +304,5 @@ def save_data(user_id):
 if __name__ == '__main__':
     logger.info(f"Server is running at http://localhost:{PORT}")
     logger.info(f"To share with other computers, use your IP address, e.g., http://192.168.x.x:{PORT}")
-    socketio.run(app, host='0.0.0.0', port=PORT, debug=True, allow_unsafe_werkzeug=True)
+    is_debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    socketio.run(app, host='0.0.0.0', port=PORT, debug=is_debug, allow_unsafe_werkzeug=is_debug)

@@ -48,9 +48,17 @@ body {
     overflow: hidden;
 }
 
+/* 桌面版整體 flex 佈局 */
 .app-container {
     display: flex !important;
     height: 100vh;
+    overflow: hidden;
+}
+
+/* 主內容區允許垂直捲動 */
+.main-content {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Sidebar Styles */
@@ -3329,11 +3337,19 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 
 /* ===== P2: 手機響應式版面 ===== */
 @media (max-width: 768px) {
+    /* 手機：解除 body 與容器的滾動鎖定 */
+    body {
+        height: auto;
+        overflow: auto;
+        overflow-x: hidden;
+    }
+
     /* 主版面改為縱向 */
     .app-container {
         flex-direction: column !important;
         height: auto !important;
         min-height: 100vh;
+        overflow: visible;
     }
 
     /* 側邊欄橫向導覽列 */
@@ -3377,6 +3393,8 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     .main-content {
         padding: 0.75rem;
         flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     /* 課表格 — 水平捲動 */
@@ -3400,6 +3418,14 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
         padding-bottom: 6px;
     }
     .course-block { flex-shrink: 0; }
+
+    /* 螢幕旋轉（landscape）確保可滾動 */
+    @media (orientation: landscape) {
+        .main-content {
+            max-height: none;
+            overflow-y: auto;
+        }
+    }
 
     /* Modal 全屏 */
     .modal-content {

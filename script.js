@@ -872,6 +872,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('course-search')?.addEventListener('input', _debouncedCourseSearch);
     document.getElementById('teacher-search')?.addEventListener('input', _debouncedTeacherSearch);
 
+    // --- 螢幕旋轉修復：重新計算佈局確保可滾動 ---
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+            window.scrollTo(0, 0);
+            document.body.style.overflow = '';
+            const mc = document.querySelector('.main-content');
+            if (mc) mc.style.overflow = '';
+        }, 300);
+    });
+
     // --- Event Listeners ---
 
     // 初始化課表標題輸入監聽
@@ -2773,23 +2783,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function attachTouchDrag(el, getData) {
+        let _touchStartX = 0, _touchStartY = 0;
+        let _isDragging = false;
+        const DRAG_THRESHOLD = 10; // px — 超過此距離才視為拖動，避免阻止正常滑動
+
         el.addEventListener('touchstart', (e) => {
             if (e.touches.length !== 1) return;
             const touch = e.touches[0];
+            _touchStartX = touch.clientX;
+            _touchStartY = touch.clientY;
+            _isDragging = false;
+            // 暫存拖放資料但不立即開始拖動
             touchDragData = getData(el);
-            touchGhost = createTouchGhost(el);
-            const rect = el.getBoundingClientRect();
-            touchGhost._offsetX = touch.clientX - rect.left;
-            touchGhost._offsetY = touch.clientY - rect.top;
-            touchGhost.style.left = (touch.clientX - touchGhost._offsetX) + 'px';
-            touchGhost.style.top = (touch.clientY - touchGhost._offsetY) + 'px';
-            el.classList.add('dragging');
-            e.preventDefault();
-        }, { passive: false });
+        }, { passive: true }); // passive: 不阻止滑動
 
         el.addEventListener('touchmove', (e) => {
-            if (!touchDragData || !touchGhost) return;
+            if (!touchDragData) return;
             const touch = e.touches[0];
+            const dx = touch.clientX - _touchStartX;
+            const dy = touch.clientY - _touchStartY;
+
+            // 未達拖動閾值 — 允許正常滑動
+            if (!_isDragging && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+
+            // 確認開始拖動
+            if (!_isDragging) {
+                _isDragging = true;
+                touchGhost = createTouchGhost(el);
+                const rect = el.getBoundingClientRect();
+                touchGhost._offsetX = _touchStartX - rect.left;
+                touchGhost._offsetY = _touchStartY - rect.top;
+                el.classList.add('dragging');
+            }
+
             touchGhost.style.left = (touch.clientX - touchGhost._offsetX) + 'px';
             touchGhost.style.top = (touch.clientY - touchGhost._offsetY) + 'px';
 
@@ -2797,23 +2823,25 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.course-group-container.drop-target').forEach(s => s.classList.remove('drop-target'));
             const slot = getTouchSlot(touch.clientX, touch.clientY);
             if (slot) slot.classList.add('drop-target');
-            e.preventDefault();
+            e.preventDefault(); // 拖動開始後才阻止滑動
         }, { passive: false });
 
         el.addEventListener('touchend', (e) => {
-            if (!touchDragData || !touchGhost) return;
-            const touch = e.changedTouches[0];
+            if (!touchDragData) return;
+            if (_isDragging && touchGhost) {
+                const touch = e.changedTouches[0];
+                document.querySelectorAll('.course-group-container.drop-target').forEach(s => s.classList.remove('drop-target'));
+                el.classList.remove('dragging');
+                touchGhost.remove();
+                touchGhost = null;
 
-            document.querySelectorAll('.course-group-container.drop-target').forEach(s => s.classList.remove('drop-target'));
-            el.classList.remove('dragging');
-            touchGhost.remove();
-            touchGhost = null;
-
-            const slot = getTouchSlot(touch.clientX, touch.clientY);
-            if (slot) {
-                handleTouchDrop(slot, touchDragData);
+                const slot = getTouchSlot(touch.clientX, touch.clientY);
+                if (slot) {
+                    handleTouchDrop(slot, touchDragData);
+                }
             }
             touchDragData = null;
+            _isDragging = false;
         });
     }
 
