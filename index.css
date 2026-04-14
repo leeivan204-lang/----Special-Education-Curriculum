@@ -3296,45 +3296,6 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     margin-bottom: 6px;
 }
 
-/* ===== Modal 放棄變更確認列 ===== */
-.modal-discard-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #fff7ed;
-    border-top: 2px solid #f97316;
-    padding: 10px 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.875rem;
-    color: #9a3412;
-    z-index: 10;
-    border-radius: 0 0 8px 8px;
-}
-.modal-discard-bar span { flex: 1; }
-.btn-discard-confirm {
-    background: var(--danger-bg);
-    color: var(--bg-white);
-    border: none;
-    border-radius: 5px;
-    padding: 5px 12px;
-    cursor: pointer;
-    font-size: 0.82rem;
-}
-.btn-discard-confirm:hover { background: var(--danger-hover); }
-.btn-discard-cancel {
-    background: var(--border-medium);
-    color: #374151;
-    border: none;
-    border-radius: 5px;
-    padding: 5px 12px;
-    cursor: pointer;
-    font-size: 0.82rem;
-}
-.btn-discard-cancel:hover { background: #d1d5db; }
-
 /* ===== 多裝置衝突解決 UI ===== */
 .conflict-modal-overlay {
     position: fixed;
