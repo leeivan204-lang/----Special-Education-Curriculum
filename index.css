@@ -3335,6 +3335,81 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 }
 .btn-discard-cancel:hover { background: #d1d5db; }
 
+/* ===== 多裝置衝突解決 UI ===== */
+.conflict-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 100000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+}
+.conflict-modal-card {
+    background: var(--bg-white, #fff);
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+.conflict-modal-card h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.3rem;
+    color: var(--text-dark, #333);
+}
+.conflict-modal-card p {
+    margin: 0 0 1.25rem 0;
+    color: var(--text-muted, #666);
+    line-height: 1.5;
+}
+.conflict-modal-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.conflict-btn {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.conflict-btn:hover { opacity: 0.85; }
+.conflict-btn-reload { background: #2196f3; color: #fff; }
+.conflict-btn-force { background: #ff9800; color: #fff; }
+.conflict-btn-backup { background: #4caf50; color: #fff; }
+.conflict-btn-merge { background: #2196f3; color: #fff; }
+
+/* 欄位衝突選擇 */
+.conflict-fields {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+.conflict-field-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border-light, #ddd);
+}
+.conflict-field-row strong {
+    min-width: 100px;
+    color: var(--text-dark, #333);
+}
+.conflict-field-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
 /* ===== P2: 手機響應式版面 ===== */
 @media (max-width: 768px) {
     /* 手機：解除 body 與容器的滾動鎖定 */

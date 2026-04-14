@@ -203,6 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let CURRENT_USER = null;
     let LAST_SYNCED_TIMESTAMP = null; // Track the base version for optimistic locking
     let PENDING_SAVE_TIMESTAMP = null; // Track our own pending save to ignore self-notifications
+    let _isDataStale = false;   // true = 其他裝置已儲存但使用者選擇「忽略」
+    let _isSaving = false;      // 防止並行儲存
+    let _baseSnapshot = null;   // 上次同步時的完整快照（用於 field-level merge）
+    const SCHEMA_VERSION = 1;   // Schema 版本號（提前宣告供衝突合併使用）
     // 動態偵測 API Base URL，自動適配本地開發、GitHub Pages、及任意部署環境
     const API_BASE = (window.location.protocol === 'file:' || window.location.hostname === '')
         ? 'http://localhost:3000/api'          // 以 file:// 開啟的靜態模式，回退到本地伺服器
@@ -228,19 +232,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('data_updated', (data) => {
-        // Disabled per user request (2026-01-19):
-        // "無需同步內容" - No need to sync content, just warn about presence.
-        console.log('Received data_updated event (Ignored per configuration):', data);
-
-        /* 
-        // Robust Self-Notification Check via Socket ID
+        // 自我通知過濾 #1：Socket ID 比對
         if (socket.id && data.sourceSocketId && socket.id === data.sourceSocketId) {
-             return;
+            return;
         }
-        if (data.timestamp && data.timestamp !== LAST_SYNCED_TIMESTAMP) {
-            showUpdateToast();
+        // 自我通知過濾 #2：正在儲存的 timestamp 比對（防競態）
+        if (PENDING_SAVE_TIMESTAMP && data.timestamp &&
+            String(PENDING_SAVE_TIMESTAMP) === String(data.timestamp)) {
+            return;
         }
-        */
+        // 其他裝置已儲存 → 通知使用者
+        if (data.timestamp && String(data.timestamp) !== String(LAST_SYNCED_TIMESTAMP)) {
+            console.log('Other device saved data:', data);
+            showDataUpdatedBar();
+        }
     });
 
     socket.on('presence_warning', (data) => {
@@ -248,10 +253,40 @@ document.addEventListener('DOMContentLoaded', () => {
         showPresenceToast(data.message);
     });
 
-    function showUpdateToast() {
-        // Function disabled per user request.
-        // Previously showed "Data Updated" toast.
-        return;
+    function showDataUpdatedBar() {
+        let bar = document.getElementById('data-updated-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'data-updated-bar';
+            bar.style.cssText = 'position:relative;width:100%;background:#ff9800;color:#fff;padding:10px 16px;box-shadow:0 2px 5px rgba(0,0,0,0.2);z-index:10001;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:bold;';
+
+            const msg = document.createElement('span');
+            msg.textContent = '⚠️ 其他裝置已更新資料';
+
+            const btnReload = document.createElement('button');
+            btnReload.textContent = '🔄 重新載入';
+            btnReload.style.cssText = 'background:#fff;color:#e65100;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.9em;';
+            btnReload.onclick = async () => {
+                bar.style.display = 'none';
+                _isDataStale = false;
+                await loadDataAndSync();
+                showSnackbar('已載入最新資料', null, 2000);
+            };
+
+            const btnIgnore = document.createElement('button');
+            btnIgnore.textContent = '忽略';
+            btnIgnore.style.cssText = 'background:transparent;color:#fff;border:1px solid #fff;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:0.9em;';
+            btnIgnore.onclick = () => {
+                bar.style.display = 'none';
+                _isDataStale = true;
+            };
+
+            bar.appendChild(msg);
+            bar.appendChild(btnReload);
+            bar.appendChild(btnIgnore);
+            document.body.insertBefore(bar, document.body.firstChild);
+        }
+        bar.style.display = 'flex';
     }
 
     function showPresenceToast(message) {
@@ -583,6 +618,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             console.log('User chose Remote. Overwriting local...');
                             importDataToMemory(bestRemoteData);
                             LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
+                            _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
+                            _isDataStale = false;
                             return;
                         }
                     }
@@ -593,6 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 importDataToMemory(bestRemoteData);
                 // Update our "base" timestamp to match what we just loaded
                 LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
+                _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
+                _isDataStale = false;
             } else {
                 // --- C. No Remote Data (New User) ---
                 console.log('No server or cloud data found.');
@@ -658,8 +697,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function saveAllDataToServer() {
+    async function saveAllDataToServer(forceOverride = false) {
         if (!CURRENT_USER) return;
+
+        // 防止並行儲存
+        if (_isSaving) { console.log('Save already in progress, skipping'); return; }
+
+        // 資料已過期警告
+        if (_isDataStale && !forceOverride) {
+            showSnackbar('資料已過期，請先重新載入再儲存', null, 4000);
+            return;
+        }
+
+        _isSaving = true;
         const data = getFullDataSnapshot();
 
         // Set pending timestamp BEFORE fetch to catch race-condition events
@@ -667,12 +717,11 @@ document.addEventListener('DOMContentLoaded', () => {
         setSaveStatus('saving');
 
         try {
-            // New optimistic locking payload
             const payload = {
                 data: data,
                 lastSyncedTimestamp: LAST_SYNCED_TIMESTAMP,
-                socketId: socket.id, // Send our socket ID so server can echo it back
-                force: true // Force save to bypass conflict checks (Last Write Wins) as per user request
+                socketId: socket.id,
+                force: forceOverride  // 僅在使用者明確選擇「強制覆蓋」或自動合併後才為 true
             };
 
             const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
@@ -681,29 +730,259 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload)
             });
 
-            /* 409 Conflict handling removed per user request (2026-01-19) - "No need to pop up this window" */
+            // --- 409 衝突處理 ---
+            if (response.status === 409) {
+                const result = await response.json();
+                setSaveStatus('error');
+                handleConflict(result.serverData);
+                return;
+            }
 
             if (!response.ok) {
-                // Ignore 409 if it somehow happens, but with force=true it shouldn't.
-                // If it's a real error (500), throw.
-                if (response.status !== 409) {
-                    throw new Error(`Server returned ${response.status} ${response.statusText}`);
-                }
+                throw new Error(`Server returned ${response.status} ${response.statusText}`);
             }
 
             console.log('Data saved to server successfully.');
             setSaveStatus('saved');
 
-            // On success, update our local base timestamp to the one we just saved
+            // 儲存成功：更新同步狀態
             LAST_SYNCED_TIMESTAMP = data.timestamp;
+            _baseSnapshot = JSON.parse(JSON.stringify(data));
+            _isDataStale = false;
+
+            // 隱藏通知條（如果有）
+            const bar = document.getElementById('data-updated-bar');
+            if (bar) bar.style.display = 'none';
 
         } catch (err) {
             console.error('Failed to save to server:', err);
             setSaveStatus('error');
         } finally {
-            // Clear pending timestamp regardless of outcome
             PENDING_SAVE_TIMESTAMP = null;
+            _isSaving = false;
         }
+    }
+
+    // ===== 多裝置衝突處理 =====
+
+    const MERGEABLE_FIELDS = [
+        'courses', 'students', 'teachers', 'assignments',
+        'scheduleData', 'teacherPartTimeMarks', 'scheduleTitle',
+        'implementationDates', 'studentManualEntries', 'slotOverrides'
+    ];
+    const FIELD_LABELS = {
+        courses: '課程', students: '學生', teachers: '教師',
+        assignments: '分組指派', scheduleData: '課表安排',
+        teacherPartTimeMarks: '教師兼課標記', scheduleTitle: '課表標題',
+        implementationDates: '實施日期', studentManualEntries: '學生手動備註',
+        slotOverrides: '時段覆蓋設定'
+    };
+
+    /**
+     * 欄位層級合併：比對 base、local、server 三方資料
+     * @returns {{ merged: Object, conflicts: Array }}
+     */
+    function fieldLevelMerge(base, local, server) {
+        const merged = {};
+        const conflicts = [];
+
+        for (const field of MERGEABLE_FIELDS) {
+            const baseVal = JSON.stringify(base[field] ?? null);
+            const localVal = JSON.stringify(local[field] ?? null);
+            const serverVal = JSON.stringify(server[field] ?? null);
+
+            if (localVal === baseVal && serverVal === baseVal) {
+                merged[field] = base[field];          // 雙方都沒改
+            } else if (localVal === baseVal) {
+                merged[field] = server[field];         // 只有伺服器改了 → 自動採用
+            } else if (serverVal === baseVal) {
+                merged[field] = local[field];          // 只有本機改了 → 自動採用
+            } else if (localVal === serverVal) {
+                merged[field] = local[field];          // 雙方改成一樣 → 都可以
+            } else {
+                conflicts.push({ field, local: local[field], server: server[field] });
+                merged[field] = server[field];         // 預設用伺服器版，使用者可覆蓋
+            }
+        }
+        return { merged, conflicts };
+    }
+
+    /**
+     * 衝突入口：先嘗試自動合併，失敗才顯示衝突 UI
+     */
+    function handleConflict(serverData) {
+        if (_baseSnapshot) {
+            const localData = getFullDataSnapshot();
+            const { merged, conflicts } = fieldLevelMerge(_baseSnapshot, localData, serverData);
+
+            if (conflicts.length === 0) {
+                // 自動合併成功！
+                merged.timestamp = Date.now();
+                merged.schemaVersion = SCHEMA_VERSION;
+                importDataToMemory(merged);
+                _baseSnapshot = JSON.parse(JSON.stringify(merged));
+                LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+                _isDataStale = false;
+                saveAllDataToServer(true); // force 儲存合併結果
+                showSnackbar('✅ 已自動合併其他裝置的變更', null, 3000);
+                return;
+            }
+
+            // 有衝突欄位 → 顯示欄位選擇 UI
+            showFieldConflictModal(merged, conflicts, serverData);
+            return;
+        }
+
+        // 沒有 baseSnapshot → 顯示完整衝突 UI（3 選項）
+        showConflictModal(serverData);
+    }
+
+    /**
+     * 完整衝突 UI：3 個選項（載入伺服器 / 強制覆蓋 / 下載備份後載入）
+     */
+    function showConflictModal(serverData) {
+        removeConflictModal();
+        const overlay = document.createElement('div');
+        overlay.id = 'conflict-modal';
+        overlay.className = 'conflict-modal-overlay';
+
+        overlay.innerHTML = `
+            <div class="conflict-modal-card">
+                <h3>⚠️ 資料衝突</h3>
+                <p>伺服器上的資料已被其他裝置更新，您的本機修改無法直接儲存。</p>
+                <div class="conflict-modal-btns">
+                    <button class="conflict-btn conflict-btn-reload">🔄 載入伺服器版本</button>
+                    <button class="conflict-btn conflict-btn-force">💾 強制覆蓋（以本機為準）</button>
+                    <button class="conflict-btn conflict-btn-backup">📋 下載備份後重新載入</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.conflict-btn-reload').onclick = () => {
+            removeConflictModal();
+            importDataToMemory(serverData);
+            LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+            _baseSnapshot = JSON.parse(JSON.stringify(serverData));
+            _isDataStale = false;
+            renderCurrentView();
+            showSnackbar('已載入伺服器版本', null, 2000);
+        };
+
+        overlay.querySelector('.conflict-btn-force').onclick = () => {
+            removeConflictModal();
+            saveAllDataToServer(true);
+        };
+
+        overlay.querySelector('.conflict-btn-backup').onclick = () => {
+            // 先下載本機備份
+            const backup = getFullDataSnapshot();
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `backup_${CURRENT_USER}_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+
+            // 再載入伺服器版本
+            removeConflictModal();
+            importDataToMemory(serverData);
+            LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+            _baseSnapshot = JSON.parse(JSON.stringify(serverData));
+            _isDataStale = false;
+            renderCurrentView();
+            showSnackbar('備份已下載，已載入伺服器版本', null, 3000);
+        };
+    }
+
+    /**
+     * 欄位衝突 UI：列出衝突欄位，讓使用者逐一選擇
+     */
+    function showFieldConflictModal(merged, conflicts, serverData) {
+        removeConflictModal();
+        const overlay = document.createElement('div');
+        overlay.id = 'conflict-modal';
+        overlay.className = 'conflict-modal-overlay';
+
+        let fieldsHtml = conflicts.map((c, i) => `
+            <div class="conflict-field-row">
+                <strong>${escHtml(FIELD_LABELS[c.field] || c.field)}</strong>
+                <label><input type="radio" name="conflict_${i}" value="local"> 保留本機版本</label>
+                <label><input type="radio" name="conflict_${i}" value="server" checked> 使用伺服器版本</label>
+            </div>
+        `).join('');
+
+        overlay.innerHTML = `
+            <div class="conflict-modal-card">
+                <h3>⚠️ 部分欄位衝突</h3>
+                <p>以下欄位在本機與伺服器上都有修改，其他欄位已自動合併。</p>
+                <div class="conflict-fields">${fieldsHtml}</div>
+                <div class="conflict-modal-btns">
+                    <button class="conflict-btn conflict-btn-merge">✅ 套用選擇並儲存</button>
+                    <button class="conflict-btn conflict-btn-backup">📋 下載備份後使用伺服器版本</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.conflict-btn-merge').onclick = () => {
+            // 根據使用者選擇更新 merged
+            conflicts.forEach((c, i) => {
+                const choice = overlay.querySelector(`input[name="conflict_${i}"]:checked`);
+                if (choice && choice.value === 'local') {
+                    merged[c.field] = c.local;
+                }
+                // server 是預設值，已在 merged 中
+            });
+
+            merged.timestamp = Date.now();
+            merged.schemaVersion = SCHEMA_VERSION;
+            removeConflictModal();
+            importDataToMemory(merged);
+            _baseSnapshot = JSON.parse(JSON.stringify(merged));
+            LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+            _isDataStale = false;
+            saveAllDataToServer(true);
+            renderCurrentView();
+            showSnackbar('✅ 衝突已解決，資料已合併儲存', null, 3000);
+        };
+
+        overlay.querySelector('.conflict-btn-backup').onclick = () => {
+            const backup = getFullDataSnapshot();
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `backup_${CURRENT_USER}_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+
+            removeConflictModal();
+            importDataToMemory(serverData);
+            LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+            _baseSnapshot = JSON.parse(JSON.stringify(serverData));
+            _isDataStale = false;
+            renderCurrentView();
+            showSnackbar('備份已下載，已載入伺服器版本', null, 3000);
+        };
+    }
+
+    function removeConflictModal() {
+        const el = document.getElementById('conflict-modal');
+        if (el) el.remove();
+    }
+
+    /**
+     * 重新渲染當前顯示的頁面
+     */
+    function renderCurrentView() {
+        try {
+            renderStudentList();
+            renderCourseList();
+            renderTeacherList();
+            renderMasterSchedule();
+        } catch (e) { console.warn('renderCurrentView error:', e); }
     }
 
     function syncLocalStorage(data, reload = false) {
@@ -1340,9 +1619,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-
-    // 目前 Schema 版本號，每次有結構性異動時遞增
-    const SCHEMA_VERSION = 1;
 
     // Helper: Get Full Data Snapshot
     function getFullDataSnapshot() {
