@@ -14,6 +14,8 @@
     <!-- Word Export Libraries -->
     <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Google Identity Services (OAuth 2.0) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body>
@@ -24,6 +26,12 @@
             <p class="login-subtitle">請輸入 ID 以進入系統</p>
             <div class="form-group">
                 <input type="text" id="login-id" class="form-control login-input" placeholder="請輸入 User ID" value="">
+            </div>
+            <!-- Google OAuth 區塊：僅在 GOOGLE_CLIENT_ID 設定後顯示 -->
+            <div id="google-auth-section" style="display:none; margin: 12px 0; text-align:center;">
+                <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">步驟二：以 Google 帳號驗證身分</div>
+                <div id="google-signin-btn"></div>
+                <div id="google-signin-status" style="font-size:0.85rem; margin-top:6px; min-height:1.2em;"></div>
             </div>
             <button id="btn-login" class="btn-primary login-btn">登入</button>
             <button id="btn-register" class="btn-secondary login-btn"
@@ -66,21 +74,21 @@
                     <span class="icon">📋</span>
                     <span>總課表</span>
                 </button>
-                <div class="nav-divider" style="height: 1px; background: rgba(255,255,255,0.2); margin: 0.5rem 1rem;">
+                <div class="nav-divider nav-utility-item" style="height: 1px; background: rgba(255,255,255,0.2); margin: 0.5rem 1rem;">
                 </div>
-                <button id="btn-backup-data" class="nav-btn" style="color: #4ade80;">
+                <button id="btn-backup-data" class="nav-btn nav-utility-item" style="color: #4ade80;">
                     <span class="icon">💾</span>
                     <span>匯出資料 (Export)</span>
                 </button>
-                <button id="btn-restore-data" class="nav-btn" style="color: #fca5a5;">
+                <button id="btn-restore-data" class="nav-btn nav-utility-item" style="color: #fca5a5;">
                     <span class="icon">📂</span>
                     <span>匯入資料 (Import)</span>
                 </button>
-                <button id="btn-export-portable" class="nav-btn" style="color: #60a5fa;">
+                <button id="btn-export-portable" class="nav-btn nav-utility-item" style="color: #60a5fa;">
                     <span class="icon">💼</span>
                     <span>匯出攜帶檔 (Portable)</span>
                 </button>
-                <div class="nav-divider" style="height: 1px; background: rgba(255,255,255,0.2); margin: 0.5rem 1rem;">
+                <div class="nav-divider nav-utility-item" style="height: 1px; background: rgba(255,255,255,0.2); margin: 0.5rem 1rem;">
                 </div>
 
 
@@ -99,7 +107,8 @@
                 </button>
 
                 <input type="file" id="file-restore-data" accept=".json" style="display: none;">
-                <div style="margin-top: auto; padding-top: 1rem; font-size: 0.8rem; color: #999; text-align: center;">
+                <div id="save-status-indicator" style="margin-top: auto; padding-top: 0.5rem; font-size: 0.8rem; text-align: center; min-height: 1.4em; color: #999;"></div>
+                <div style="padding-bottom: 0.5rem; font-size: 0.8rem; color: #999; text-align: center;">
                     系統版本: 2025.12.11
                 </div>
             </nav>
@@ -111,10 +120,13 @@
             <div id="students-view" class="view-container active">
                 <div class="view-header">
                     <h2>學生管理</h2>
-                    <button id="btn-add-student" class="btn-primary">
-                        <span>➕</span>
-                        <span>新增學生</span>
-                    </button>
+                    <div style="display:flex;gap:0.5rem;">
+                        <button id="btn-add-student" class="btn-primary">
+                            <span>➕</span>
+                            <span>新增學生</span>
+                        </button>
+                        <button id="btn-batch-add-student" class="btn-secondary">批次新增</button>
+                    </div>
                 </div>
                 <div
                     style="padding: 0.75rem 1.5rem; background-color: #e0f2fe; border-left: 4px solid #0284c7; margin-bottom: 1rem; border-radius: 0.375rem;">
@@ -122,6 +134,7 @@
                         💡 <strong>使用提示：</strong>新增學生姓名。若是現有學生姓名，點擊年級數字即可變動，按到9之後會變回7。
                     </p>
                 </div>
+                <input type="search" id="student-search" class="list-search-input" placeholder="搜尋學生姓名…">
                 <div id="student-list" class="student-list-grid">
                     <!-- 動態生成學生列表 -->
                 </div>
@@ -136,6 +149,7 @@
                         <span>新增課程</span>
                     </button>
                 </div>
+                <input type="search" id="course-search" class="list-search-input" placeholder="搜尋課程名稱…">
                 <div id="course-list" class="course-list">
                     <!-- 動態生成課程列表 -->
                 </div>
@@ -609,6 +623,7 @@
                         <span>新增教師</span>
                     </button>
                 </div>
+                <input type="search" id="teacher-search" class="list-search-input" placeholder="搜尋教師姓名…">
                 <div id="teacher-list" class="teacher-list-grid">
                     <!-- 動態生成教師列表 -->
                 </div>

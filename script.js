@@ -1,3 +1,28 @@
+/**
+ * 特教課表管理系統 — 前端核心 (script.js)
+ *
+ * ┌─────────────────────────────────────────────────────┐
+ * │  TABLE OF CONTENTS                                  │
+ * ├─────────────────────────────────────────────────────┤
+ * │  §1   Google OAuth 設定 & 狀態          (~L20)      │
+ * │  §2   通用工具 (debounce, store, snackbar) (~L102)  │
+ * │  §3   Login & State Management          (~L177)     │
+ * │  §4   DOM Elements & Constants          (~L783)     │
+ * │  §5   Event Listeners & Init            (~L842)     │
+ * │  §6   Data Backup & Restore             (~L1048)    │
+ * │  §7   Course Functions (CRUD, render)   (~L1354)    │
+ * │  §8   Student Functions (CRUD, render)  (~L1745)    │
+ * │  §9   Teacher Functions (CRUD, render)  (~L1898)    │
+ * │  §10  Grouping Functions                (~L2045)    │
+ * │  §11  Schedule Drag & Drop              (~L2559)    │
+ * │  §12  Touch Drag & Drop                 (~L2700)    │
+ * │  §13  Master Schedule Functions         (~L2995)    │
+ * │  §14  Schedule Generation (Student)     (~L3404)    │
+ * │  §15  Print / PDF Schedule              (~L4590)    │
+ * │  §16  Word Export Bindings              (~L4699)    │
+ * │  §17  Test Exports                      (~L5427)    │
+ * └─────────────────────────────────────────────────────┘
+ */
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化簡易課表視圖結構：確保有 course-blocks-pool 和 schedule-container
     const scheduleView = document.getElementById('schedule-view');
@@ -15,6 +40,163 @@ document.addEventListener('DOMContentLoaded', () => {
         // 將 courseBlocksPool 移動到包裝容器中（左側）
         wrapper.appendChild(courseBlocksPool);
         wrapper.appendChild(scheduleContainer);
+    }
+
+    // --- Google OAuth 設定 ---
+    // 【部署前必填】將下方 'YOUR_GOOGLE_CLIENT_ID' 替換為 Google Cloud Console 的 OAuth 2.0 Client ID
+    // 格式範例：'123456789-abcdefg.apps.googleusercontent.com'
+    // 若留空或保持預設值，Google OAuth 功能將被停用（本機 Flask 模式可正常使用）
+    const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
+
+    // --- Google OAuth 狀態 ---
+    let googleIdToken = null;
+    let googleTokenExp = 0; // Unix timestamp (秒)
+
+    function isGoogleTokenValid() {
+        // 檢查 token 是否存在且距離過期還有 60 秒以上
+        return !!(googleIdToken && (Date.now() / 1000) < (googleTokenExp - 60));
+    }
+
+    function isGoogleOAuthEnabled() {
+        return GOOGLE_CLIENT_ID && !GOOGLE_CLIENT_ID.includes('YOUR_GOOGLE_CLIENT_ID');
+    }
+
+    // Google GSI callback（必須掛在 window 上）
+    window.handleGoogleCredential = function(response) {
+        googleIdToken = response.credential;
+        // 解析 JWT payload（不驗簽，僅取 exp 與 email 用於 UI 顯示；真正驗證在 GAS 端）
+        try {
+            const b64 = response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(atob(b64));
+            googleTokenExp = payload.exp;
+            const email = payload.email || '';
+            const statusEl = document.getElementById('google-signin-status');
+            if (statusEl) {
+                statusEl.textContent = `✓ 已驗證：${email}`;
+                statusEl.style.color = '#4ade80';
+            }
+            const btnDiv = document.getElementById('google-signin-btn');
+            if (btnDiv) btnDiv.style.display = 'none';
+        } catch(e) {
+            console.warn('Failed to parse Google credential payload:', e);
+        }
+    };
+
+    function initGoogleSignIn() {
+        if (!isGoogleOAuthEnabled()) return;
+        if (typeof google === 'undefined' || !google.accounts) return;
+
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: window.handleGoogleCredential,
+            auto_select: false,
+            context: 'signin'
+        });
+
+        const btnDiv = document.getElementById('google-signin-btn');
+        if (btnDiv) {
+            google.accounts.id.renderButton(btnDiv, {
+                theme: 'outline',
+                size: 'large',
+                text: 'signin_with',
+                locale: 'zh-TW',
+                width: 280
+            });
+        }
+
+        // 顯示 Google 驗證區塊（設定 User ID 輸入為步驟一）
+        const authSection = document.getElementById('google-auth-section');
+        if (authSection) {
+            authSection.style.display = 'block';
+            // 同時更新 subtitle 提示
+            const subtitle = document.querySelector('.login-subtitle');
+            if (subtitle) subtitle.textContent = '步驟一：輸入您的 ID';
+        }
+    }
+
+    // GSI 庫載入完成後的 callback
+    window.onGoogleLibraryLoad = function() {
+        initGoogleSignIn();
+    };
+    // 也嘗試在 DOMContentLoaded 後初始化（GSI 可能已快取載入）
+    setTimeout(() => initGoogleSignIn(), 500);
+
+    // ===== 全域 UI 工具函式 =====
+
+    // --- Snackbar（可復原通知）---
+    // --- 通用工具 ---
+    function debounce(fn, ms) {
+        let id;
+        return function (...args) { clearTimeout(id); id = setTimeout(() => fn.apply(this, args), ms); };
+    }
+
+    // --- Centralized Data Store ---
+    const store = {
+        get(key, fallback = null) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw !== null ? JSON.parse(raw) : fallback;
+            } catch { return fallback; }
+        },
+        set(key, value) {
+            localStorage.setItem(key, JSON.stringify(value));
+        },
+        remove(key) {
+            localStorage.removeItem(key);
+        },
+        getRaw(key) {
+            return localStorage.getItem(key);
+        },
+        setRaw(key, value) {
+            localStorage.setItem(key, String(value));
+        }
+    };
+
+    let _snackbarTimer = null;
+    function showSnackbar(message, undoCallback = null, duration = 5000) {
+        let sb = document.getElementById('snackbar');
+        if (!sb) {
+            sb = document.createElement('div');
+            sb.id = 'snackbar';
+            document.body.appendChild(sb);
+        }
+        clearTimeout(_snackbarTimer);
+        sb.innerHTML = '';
+        const msgSpan = document.createElement('span');
+        msgSpan.textContent = message;
+        sb.appendChild(msgSpan);
+        if (undoCallback) {
+            const undoBtn = document.createElement('button');
+            undoBtn.textContent = '復原';
+            undoBtn.className = 'snackbar-undo';
+            undoBtn.onclick = () => { undoCallback(); hideSnackbar(); };
+            sb.appendChild(undoBtn);
+        }
+        sb.classList.add('show');
+        _snackbarTimer = setTimeout(hideSnackbar, duration);
+    }
+    function hideSnackbar() {
+        const sb = document.getElementById('snackbar');
+        if (sb) sb.classList.remove('show');
+    }
+
+    // --- Modal 行內錯誤訊息 ---
+    function showModalError(message) {
+        let el = document.getElementById('modal-error-msg');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'modal-error-msg';
+            el.className = 'modal-error-msg';
+            const body = document.getElementById('modal-body');
+            if (body) body.prepend(el);
+        }
+        el.textContent = message;
+        el.style.display = 'block';
+        el.scrollIntoView({ block: 'nearest' });
+    }
+    function clearModalError() {
+        const el = document.getElementById('modal-error-msg');
+        if (el) el.style.display = 'none';
     }
 
     // --- Login & State ---
@@ -175,13 +357,19 @@ document.addEventListener('DOMContentLoaded', () => {
             'studentManualEntries', 'slotOverrides',
             'lastSavedTimestamp', 'lastCloudBackupTimestamp'
         ];
-        APP_STORAGE_KEYS.forEach(k => localStorage.removeItem(k));
+        APP_STORAGE_KEYS.forEach(k => store.remove(k));
     }
 
     async function handleLogin() {
         const userId = loginInput.value.trim();
         if (!userId) {
             showLoginError('請輸入 User ID');
+            return;
+        }
+
+        // 若 Google OAuth 已啟用，則必須先完成 Google 驗證
+        if (isGoogleOAuthEnabled() && !isGoogleTokenValid()) {
+            showLoginError('請先完成步驟二：點擊上方「以 Google 帳號登入」按鈕');
             return;
         }
 
@@ -288,15 +476,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2. Fetch Cloud Data (if GAS URL exists)
             let cloudPromise = Promise.resolve(null);
-            try { console.log('DEBUG: GAS_API_URL is', GAS_API_URL); } catch (e) { console.log('DEBUG: GAS_API_URL error', e.message); }
             if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL) {
                 console.log('Fetching Google Sheet data...');
-                cloudPromise = fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`)
+                const gasController = new AbortController();
+                const gasTimeout = setTimeout(() => gasController.abort(), 8000); // 8s timeout
+                // 附加 idToken（若有效）以通過 GAS 端 OAuth 驗證
+                const gasTokenParam = isGoogleTokenValid() ? `&idToken=${encodeURIComponent(googleIdToken)}` : '';
+                cloudPromise = fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}${gasTokenParam}`, { signal: gasController.signal })
                     .then(r => r.json())
                     .catch(err => {
-                        console.warn('Google Sheets fetch failed:', err);
+                        console.warn('Google Sheets fetch failed:', err.name === 'AbortError' ? 'timeout' : err);
                         return null;
-                    });
+                    })
+                    .finally(() => clearTimeout(gasTimeout));
             }
 
             // Wait for both
@@ -359,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (bestRemoteData) {
                 // We have a candidate from remote (Server or Cloud)
-                const localTimestamp = localStorage.getItem('lastSavedTimestamp');
+                const localTimestamp = store.getRaw('lastSavedTimestamp');
 
                 // If we have valid local data
                 if (courses.length > 0) {
@@ -442,12 +634,31 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { console.error('Error saving to custom server:', e); }
     }
 
+    let _saveStatusTimer = null;
+    function setSaveStatus(state) {
+        const el = document.getElementById('save-status-indicator');
+        if (!el) return;
+        clearTimeout(_saveStatusTimer);
+        if (state === 'saving') {
+            el.textContent = '儲存中...';
+            el.style.color = '#f59e0b';
+        } else if (state === 'saved') {
+            el.textContent = '✓ 已儲存';
+            el.style.color = '#4ade80';
+            _saveStatusTimer = setTimeout(() => { el.textContent = ''; }, 3000);
+        } else if (state === 'error') {
+            el.textContent = '⚠ 儲存失敗';
+            el.style.color = '#f87171';
+        }
+    }
+
     async function saveAllDataToServer() {
         if (!CURRENT_USER) return;
         const data = getFullDataSnapshot();
 
         // Set pending timestamp BEFORE fetch to catch race-condition events
         PENDING_SAVE_TIMESTAMP = data.timestamp;
+        setSaveStatus('saving');
 
         try {
             // New optimistic locking payload
@@ -475,12 +686,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             console.log('Data saved to server successfully.');
+            setSaveStatus('saved');
 
             // On success, update our local base timestamp to the one we just saved
             LAST_SYNCED_TIMESTAMP = data.timestamp;
 
         } catch (err) {
             console.error('Failed to save to server:', err);
+            setSaveStatus('error');
         } finally {
             // Clear pending timestamp regardless of outcome
             PENDING_SAVE_TIMESTAMP = null;
@@ -489,16 +702,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function syncLocalStorage(data, reload = false) {
         if (!data) return;
-        localStorage.setItem('courses', JSON.stringify(data.courses || []));
-        localStorage.setItem('students', JSON.stringify(data.students || []));
-        localStorage.setItem('teachers', JSON.stringify(data.teachers || []));
-        localStorage.setItem('assignments', JSON.stringify(data.assignments || {}));
-        localStorage.setItem('scheduleData', JSON.stringify(data.scheduleData || {}));
-        localStorage.setItem('teacherPartTimeMarks', JSON.stringify(data.teacherPartTimeMarks || {}));
-        localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle || { prefix: '', year: '', semester: '', suffix: '' }));
-        localStorage.setItem('implementationDates', JSON.stringify(data.implementationDates || { startDate: '', endDate: '' }));
-        localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries || {}));
-        localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides || {}));
+        store.set('courses', data.courses || []);
+        store.set('students', data.students || []);
+        store.set('teachers', data.teachers || []);
+        store.set('assignments', data.assignments || {});
+        store.set('scheduleData', data.scheduleData || {});
+        store.set('teacherPartTimeMarks', data.teacherPartTimeMarks || {});
+        store.set('scheduleTitle', data.scheduleTitle || { prefix: '', year: '', semester: '', suffix: '' });
+        store.set('implementationDates', data.implementationDates || { startDate: '', endDate: '' });
+        store.set('studentManualEntries', data.studentManualEntries || {});
+        store.set('slotOverrides', data.slotOverrides || {});
 
         if (reload) {
             window.location.reload();
@@ -539,24 +752,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- State Management ---
-    let courses = JSON.parse(localStorage.getItem('courses')) || [];
-    let students = JSON.parse(localStorage.getItem('students')) || [];
-    let teachers = JSON.parse(localStorage.getItem('teachers')) || [];
-    let assignments = JSON.parse(localStorage.getItem('assignments')) || {}; // { courseId: { groupName: [studentId, ...] } }
-    let scheduleData = JSON.parse(localStorage.getItem('scheduleData')) || {}; // { 'monday-1': { courseId, groupName, blockIndex }, ... }
-    let teacherPartTimeMarks = JSON.parse(localStorage.getItem('teacherPartTimeMarks')) || {}; // { teacherName: { 'monday-1': true, ... } }
-    let scheduleTitle = JSON.parse(localStorage.getItem('scheduleTitle')) || {
+    let courses = store.get('courses', []);
+    let students = store.get('students', []);
+    let teachers = store.get('teachers', []);
+    let assignments = store.get('assignments', {}); // { courseId: { groupName: [studentId, ...] } }
+    let scheduleData = store.get('scheduleData', {}); // { 'monday-1': { courseId, groupName, blockIndex }, ... }
+    let teacherPartTimeMarks = store.get('teacherPartTimeMarks', {}); // { teacherName: { 'monday-1': true, ... } }
+    let scheduleTitle = store.get('scheduleTitle', {
         prefix: '',
         year: '',
         semester: '',
         suffix: ''
-    };
-    let implementationDates = JSON.parse(localStorage.getItem('implementationDates')) || {
+    });
+    let implementationDates = store.get('implementationDates', {
         startDate: '',
         endDate: ''
-    };
-    let studentManualEntries = JSON.parse(localStorage.getItem('studentManualEntries')) || {}; // { studentId: { 'monday-1': 'text', ... } }
-    let slotOverrides = JSON.parse(localStorage.getItem('slotOverrides')) || {}; // { slotKey: { courseId: { groupName: [studentId, ...] } } }
+    });
+    let studentManualEntries = store.get('studentManualEntries', {}); // { studentId: { 'monday-1': 'text', ... } }
+    let slotOverrides = store.get('slotOverrides', {}); // { slotKey: { courseId: { groupName: [studentId, ...] } } }
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec';
 
     // Sanitize schedule data to remove invalid entries
@@ -587,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (hasChanges) {
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
         }
     }
@@ -601,6 +814,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalClose = document.getElementById('modal-close');
     const modalCancel = document.getElementById('modal-cancel');
     const modalConfirm = document.getElementById('modal-confirm');
+
+    // Modal dirty-state tracking
+    let modalDirty = false;
+    if (modalBody) {
+        modalBody.addEventListener('input', () => { modalDirty = true; });
+        modalBody.addEventListener('change', () => { modalDirty = true; });
+    }
 
     // Course Elements
     const btnAddCourse = document.getElementById('btn-add-course');
@@ -644,6 +864,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeScheduleTitle();
     renderMasterSchedule();
 
+    // --- 搜尋框 debounce 綁定 ---
+    const _debouncedStudentSearch = debounce(renderStudentList, 200);
+    const _debouncedCourseSearch = debounce(renderCourseList, 200);
+    const _debouncedTeacherSearch = debounce(renderTeacherList, 200);
+    document.getElementById('student-search')?.addEventListener('input', _debouncedStudentSearch);
+    document.getElementById('course-search')?.addEventListener('input', _debouncedCourseSearch);
+    document.getElementById('teacher-search')?.addEventListener('input', _debouncedTeacherSearch);
+
     // --- Event Listeners ---
 
     // 初始化課表標題輸入監聽
@@ -662,7 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 input.value = scheduleTitle[key];
                 input.addEventListener('input', (e) => {
                     scheduleTitle[key] = e.target.value;
-                    localStorage.setItem('scheduleTitle', JSON.stringify(scheduleTitle));
+                    store.set('scheduleTitle', scheduleTitle);
                     saveAllDataToServer();
                 });
             }
@@ -676,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startDateInput.value = implementationDates.startDate;
             startDateInput.addEventListener('input', (e) => {
                 implementationDates.startDate = e.target.value;
-                localStorage.setItem('implementationDates', JSON.stringify(implementationDates));
+                store.set('implementationDates', implementationDates);
                 saveAllDataToServer();
             });
         }
@@ -685,7 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
             endDateInput.value = implementationDates.endDate;
             endDateInput.addEventListener('input', (e) => {
                 implementationDates.endDate = e.target.value;
-                localStorage.setItem('implementationDates', JSON.stringify(implementationDates));
+                store.set('implementationDates', implementationDates);
                 saveAllDataToServer();
             });
         }
@@ -736,6 +964,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal && modal.style.display === 'block') closeModal();
+    });
 
     // Add Course Button
     if (btnAddCourse) {
@@ -749,6 +980,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnAddStudent.addEventListener('click', () => {
             openAddStudentModal();
         });
+    }
+
+    const btnBatchAddStudent = document.getElementById('btn-batch-add-student');
+    if (btnBatchAddStudent) {
+        btnBatchAddStudent.addEventListener('click', openBatchAddStudentModal);
     }
 
     // Add Teacher Button
@@ -825,7 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     course.groups.forEach(groupName => {
                         assignments[currentGroupingCourseId][groupName] = [];
                     });
-                    localStorage.setItem('assignments', JSON.stringify(assignments));
+                    store.set('assignments', assignments);
                 }
 
                 // Re-render the workspace
@@ -866,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Extracted backup function
     async function backupToCloud(skipConfirm = false) {
         if (!GAS_API_URL) {
-            alert('系統未設定 Google Apps Script 網址，請聯繫管理員！');
+            showSnackbar('系統未設定 Google Apps Script 網址，請聯繫管理員！');
             return false;
         }
 
@@ -880,11 +1116,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = getFullDataSnapshot();
             data.userId = CURRENT_USER;
-
-            // Using standard POST. Script should handle doGet/doPost.
-            // Assuming the script returns JSON response. 
-            // Using no-cors might prevent reading response, trying standard first.
-            // If CORS issue, user might need to deploy GAS as "Anyone".
+            // 附加 idToken（若有效）以通過 GAS 端 OAuth 驗證
+            if (isGoogleTokenValid()) {
+                data.idToken = googleIdToken;
+            }
 
             await fetch(GAS_API_URL, {
                 method: 'POST',
@@ -892,17 +1127,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(data)
             });
 
-            if (!skipConfirm) alert('備份請求已發送至 Google Cloud！');
+            if (!skipConfirm) showSnackbar('備份請求已發送至 Google Cloud！');
 
             // Update Cloud Backup Timestamp
-            localStorage.setItem('lastCloudBackupTimestamp', new Date().getTime());
+            store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
             updateCloudSyncStatus();
 
             return true;
 
         } catch (err) {
             console.error(err);
-            alert('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
+            showSnackbar('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
             return false;
         } finally {
             if (btnCloudBackup) {
@@ -921,8 +1156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateCloudSyncStatus() {
         if (!btnCloudBackup) return;
 
-        const localTs = parseInt(localStorage.getItem('lastSavedTimestamp') || '0');
-        const cloudTs = parseInt(localStorage.getItem('lastCloudBackupTimestamp') || '0');
+        const localTs = parseInt(store.getRaw('lastSavedTimestamp') || '0');
+        const cloudTs = parseInt(store.getRaw('lastCloudBackupTimestamp') || '0');
 
         const iconSpan = btnCloudBackup.querySelector('.icon');
 
@@ -953,7 +1188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Let's check getFullDataSnapshot.
         // Assuming it does, we just update status here.
         // We'll manually set the local TS in localStorage if not set, to ensure comparison works
-        localStorage.setItem('lastSavedTimestamp', Date.now());
+        store.setRaw('lastSavedTimestamp', Date.now());
         updateCloudSyncStatus();
     };
 
@@ -970,18 +1205,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('登出前是否要備份資料至 Google Cloud？\n(建議點選「確定」以確保資料安全)')) {
             const success = await backupToCloud(true); // true = skip duplicate confirm
             if (success) {
-                alert('備份成功，即將登出...');
-                location.reload();
+                showSnackbar('備份成功，即將登出...');
+                setTimeout(doLogout, 1500);
             } else {
                 // 備份失敗
                 if (confirm('備份失敗，仍要強制登出嗎？')) {
-                    location.reload();
+                    doLogout();
                 }
             }
         } else {
             // 用戶選擇不備份，直接登出
-            location.reload();
+            doLogout();
         }
+    }
+
+    function doLogout() {
+        // 清除 Google OAuth 狀態
+        if (isGoogleOAuthEnabled() && typeof google !== 'undefined' && google.accounts) {
+            google.accounts.id.disableAutoSelect();
+        }
+        googleIdToken = null;
+        googleTokenExp = 0;
+        location.reload();
     }
 
     // 2. Portable Export (data.js Download)
@@ -999,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            alert('攜帶檔 (data.js) 已建立！\n請將此檔案儲存在與 index.html 同一個資料夾內。\n若要移至其他電腦，請複製整個資料夾。');
+            showSnackbar('攜帶檔 (data.js) 已建立！請儲存在 index.html 同一資料夾內。');
         });
     }
 
@@ -1034,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         restoreData(data);
                     }
                 } catch (err) {
-                    alert('還原失敗：檔案格式錯誤\n請確認您選擇的是正確的 .json 備份檔或 data.js 攜帶檔。');
+                    showSnackbar('還原失敗：檔案格式錯誤，請確認為正確的備份檔。');
                     console.error(err);
                 }
                 fileRestoreData.value = ''; // Reset
@@ -1047,11 +1292,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.portableData) {
         console.log('Portable data detected:', window.portableData);
 
-        const localTimestampStr = localStorage.getItem('lastSavedTimestamp');
+        const localTimestampStr = store.getRaw('lastSavedTimestamp');
         const portableTimestampStr = window.portableData.timestamp;
 
         // Has local data?
-        const hasLocalData = localStorage.getItem('courses') && JSON.parse(localStorage.getItem('courses')).length > 0;
+        const hasLocalData = store.getRaw('courses') && store.get('courses', []).length > 0;
 
         if (!hasLocalData) {
             console.log('No local data found. Auto-importing portable data...');
@@ -1088,16 +1333,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             schemaVersion: SCHEMA_VERSION,
             timestamp: Date.now(), // UTC 毫秒整數，避免時區格式差異造成比對錯誤
-            courses: JSON.parse(localStorage.getItem('courses') || '[]'),
-            teachers: JSON.parse(localStorage.getItem('teachers') || '[]'),
-            students: JSON.parse(localStorage.getItem('students') || '[]'),
-            scheduleData: JSON.parse(localStorage.getItem('scheduleData') || '{}'),
-            assignments: JSON.parse(localStorage.getItem('assignments') || '{}'),
-            implementationDates: JSON.parse(localStorage.getItem('implementationDates') || '{}'),
-            teacherPartTimeMarks: JSON.parse(localStorage.getItem('teacherPartTimeMarks') || '{}'),
-            studentManualEntries: JSON.parse(localStorage.getItem('studentManualEntries') || '{}'),
-            slotOverrides: JSON.parse(localStorage.getItem('slotOverrides') || '{}'),
-            scheduleTitle: JSON.parse(localStorage.getItem('scheduleTitle') || '{}')
+            courses: store.get('courses', []),
+            teachers: store.get('teachers', []),
+            students: store.get('students', []),
+            scheduleData: store.get('scheduleData', {}),
+            assignments: store.get('assignments', {}),
+            implementationDates: store.get('implementationDates', {}),
+            teacherPartTimeMarks: store.get('teacherPartTimeMarks', {}),
+            studentManualEntries: store.get('studentManualEntries', {}),
+            slotOverrides: store.get('slotOverrides', {}),
+            scheduleTitle: store.get('scheduleTitle', {})
         };
     }
 
@@ -1108,26 +1353,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Restore Data
     function restoreData(data, reload = true) {
-        if (data.courses) localStorage.setItem('courses', JSON.stringify(data.courses));
-        if (data.teachers) localStorage.setItem('teachers', JSON.stringify(data.teachers));
-        if (data.students) localStorage.setItem('students', JSON.stringify(data.students));
-        if (data.scheduleData) localStorage.setItem('scheduleData', JSON.stringify(data.scheduleData));
-        if (data.assignments) localStorage.setItem('assignments', JSON.stringify(data.assignments));
-        if (data.implementationDates) localStorage.setItem('implementationDates', JSON.stringify(data.implementationDates));
-        if (data.teacherPartTimeMarks) localStorage.setItem('teacherPartTimeMarks', JSON.stringify(data.teacherPartTimeMarks));
-        if (data.studentManualEntries) localStorage.setItem('studentManualEntries', JSON.stringify(data.studentManualEntries));
-        if (data.slotOverrides) localStorage.setItem('slotOverrides', JSON.stringify(data.slotOverrides));
-        if (data.scheduleTitle) localStorage.setItem('scheduleTitle', JSON.stringify(data.scheduleTitle));
+        if (data.courses) store.set('courses', data.courses);
+        if (data.teachers) store.set('teachers', data.teachers);
+        if (data.students) store.set('students', data.students);
+        if (data.scheduleData) store.set('scheduleData', data.scheduleData);
+        if (data.assignments) store.set('assignments', data.assignments);
+        if (data.implementationDates) store.set('implementationDates', data.implementationDates);
+        if (data.teacherPartTimeMarks) store.set('teacherPartTimeMarks', data.teacherPartTimeMarks);
+        if (data.studentManualEntries) store.set('studentManualEntries', data.studentManualEntries);
+        if (data.slotOverrides) store.set('slotOverrides', data.slotOverrides);
+        if (data.scheduleTitle) store.set('scheduleTitle', data.scheduleTitle);
         // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
 
-        localStorage.setItem('lastSavedTimestamp', data.timestamp || Date.now());
+        store.setRaw('lastSavedTimestamp', data.timestamp || Date.now());
 
         // Sync restored data to server
         saveAllDataToServer();
 
         if (reload) {
-            alert('資料載入成功！網頁將自動重新整理。');
-            location.reload();
+            showSnackbar('資料載入成功！網頁將自動重新整理。');
+            setTimeout(() => location.reload(), 1500);
         }
     }
 
@@ -1227,7 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.currentTeacherOptions = teacherOptions;
         updateHandler();
         modalConfirm.onclick = handleSaveCourse;
-        modal.style.display = 'block';
+        modal.style.display = 'block'; modalDirty = false;
     }
 
     function updateGroupPreview(courseToEdit = null) {
@@ -1356,6 +1601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleSaveCourse() {
+        clearModalError();
         const subjectSelect = document.getElementById('subject-select');
         const customInput = document.getElementById('custom-subject-input');
 
@@ -1363,7 +1609,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (subjectName === '自訂') {
             subjectName = customInput.value.trim();
             if (!subjectName) {
-                alert('請輸入課程名稱！');
+                showModalError('請輸入課程名稱！');
                 return;
             }
         }
@@ -1405,6 +1651,18 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
+        // Validate group names: non-empty and unique within this course
+        for (const gName of groupNames) {
+            if (!gName) {
+                showModalError('分組名稱不可為空，請填寫所有分組名稱。');
+                return;
+            }
+        }
+        if (new Set(groupNames).size !== groupNames.length) {
+            showModalError('分組名稱不可重複，請修正後再儲存。');
+            return;
+        }
+
         if (editingCourseId) {
             // Update existing course
             const index = courses.findIndex(c => c.id === editingCourseId);
@@ -1433,7 +1691,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveCourses() {
-        localStorage.setItem('courses', JSON.stringify(courses));
+        store.set('courses', courses);
         saveAllDataToServer();
     }
 
@@ -1447,12 +1705,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCourseList() {
         if (!courseListContainer) return;
 
+        const searchVal = (document.getElementById('course-search')?.value || '').trim().toLowerCase();
+
         if (courses.length === 0) {
             courseListContainer.innerHTML = '<div class="empty-state">尚未新增任何課程</div>';
             return;
         }
 
-        courseListContainer.innerHTML = courses.map(course => {
+        const filteredCourses = searchVal ? courses.filter(c => c.name.toLowerCase().includes(searchVal)) : courses;
+
+        if (filteredCourses.length === 0) {
+            courseListContainer.innerHTML = '<div class="empty-state">無符合的課程</div>';
+            return;
+        }
+
+        courseListContainer.innerHTML = filteredCourses.map(course => {
             // 防禦性檢查：確保 groups 是陣列
             if (!Array.isArray(course.groups) || course.groups.length === 0) {
                 console.warn('Invalid course data (missing or invalid groups):', course);
@@ -1520,16 +1787,85 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         modalConfirm.onclick = handleSaveStudent;
-        modal.style.display = 'block';
+        modal.style.display = 'block'; modalDirty = false;
+    }
+
+    function openBatchAddStudentModal() {
+        modalTitle.textContent = '批次新增學生';
+        modalBody.innerHTML = `
+            <div class="form-group">
+                <label>年級</label>
+                <select id="batch-student-grade" class="form-control">
+                    <option value="7">7 年級</option>
+                    <option value="8">8 年級</option>
+                    <option value="9">9 年級</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>學生姓名（每行一位）</label>
+                <div class="batch-add-area">
+                    <textarea id="batch-student-names" placeholder="例如：\n王小明\n李小華\n張志遠"></textarea>
+                </div>
+                <div class="batch-hint">每行輸入一個姓名，空白行將略過，已存在的姓名不會重複新增。</div>
+            </div>
+        `;
+        modalConfirm.onclick = handleBatchSaveStudents;
+        modal.style.display = 'block'; modalDirty = false;
+        setTimeout(() => document.getElementById('batch-student-names')?.focus(), 100);
+    }
+
+    function handleBatchSaveStudents() {
+        clearModalError();
+        const grade = parseInt(document.getElementById('batch-student-grade').value);
+        const raw = document.getElementById('batch-student-names').value;
+        const names = raw.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+
+        if (names.length === 0) {
+            showModalError('請輸入至少一個學生姓名。');
+            return;
+        }
+
+        const existingNames = new Set(students.map(s => s.name));
+        const added = [];
+        const skipped = [];
+
+        names.forEach(name => {
+            if (existingNames.has(name)) {
+                skipped.push(name);
+            } else {
+                students.push({ id: Date.now() + Math.random(), name, grade });
+                existingNames.add(name);
+                added.push(name);
+            }
+        });
+
+        if (added.length > 0) {
+            saveStudents();
+            renderStudentList();
+        }
+
+        closeModal();
+
+        if (skipped.length > 0) {
+            showSnackbar(`已新增 ${added.length} 位學生，略過 ${skipped.length} 位（已存在）`);
+        } else {
+            showSnackbar(`已新增 ${added.length} 位學生`);
+        }
     }
 
     function handleSaveStudent() {
+        clearModalError();
         const nameInput = document.getElementById('student-name');
         const gradeInput = document.getElementById('student-grade');
 
         const name = nameInput.value.trim();
         if (!name) {
-            alert('請輸入學生姓名！');
+            showModalError('請輸入學生姓名！');
+            return;
+        }
+
+        if (students.some(s => s.name === name)) {
+            showModalError(`學生「${name}」已存在，請使用不同的姓名。`);
             return;
         }
 
@@ -1546,12 +1882,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveStudents() {
-        localStorage.setItem('students', JSON.stringify(students));
+        store.set('students', students);
         saveAllDataToServer();
     }
 
     function renderStudentList() {
         if (!studentListContainer) return;
+
+        const searchVal = (document.getElementById('student-search')?.value || '').trim().toLowerCase();
 
         if (students.length === 0) {
             studentListContainer.innerHTML = '<div class="empty-state">尚未新增任何學生</div>';
@@ -1559,10 +1897,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Sort by grade (9 -> 7) then name
-        const sortedStudents = [...students].sort((a, b) => {
-            if (b.grade !== a.grade) return b.grade - a.grade;
-            return a.name.localeCompare(b.name);
-        });
+        const sortedStudents = [...students]
+            .filter(s => !searchVal || s.name.toLowerCase().includes(searchVal))
+            .sort((a, b) => {
+                if (b.grade !== a.grade) return b.grade - a.grade;
+                return a.name.localeCompare(b.name);
+            });
+
+        if (sortedStudents.length === 0) {
+            studentListContainer.innerHTML = '<div class="empty-state">無符合的學生</div>';
+            return;
+        }
 
         studentListContainer.innerHTML = sortedStudents.map(student => `
             <div class="student-card">
@@ -1594,15 +1939,16 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         modalConfirm.onclick = handleSaveTeacher;
-        modal.style.display = 'block';
+        modal.style.display = 'block'; modalDirty = false;
     }
 
     function handleSaveTeacher() {
+        clearModalError();
         const nameInput = document.getElementById('teacher-name');
         const name = nameInput.value.trim();
 
         if (!name) {
-            alert('請輸入教師姓名！');
+            showModalError('請輸入教師姓名！');
             return;
         }
 
@@ -1612,11 +1958,20 @@ document.addEventListener('DOMContentLoaded', () => {
             // Edit existing teacher
             const index = teachers.findIndex(t => t.id === editingTeacherId);
             if (index !== -1) {
+                // Check duplicate name (excluding self)
+                if (teachers.some(t => t.name === name && t.id !== editingTeacherId)) {
+                    showModalError(`教師「${name}」已存在，請使用不同的姓名。`);
+                    return;
+                }
                 teachers[index].name = name;
                 teachers[index].baseHours = baseHours;
             }
         } else {
             // Add new teacher
+            if (teachers.some(t => t.name === name)) {
+                showModalError(`教師「${name}」已存在，請使用不同的姓名。`);
+                return;
+            }
             const newTeacher = {
                 id: Date.now(),
                 name: name,
@@ -1632,19 +1987,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveTeachers() {
-        localStorage.setItem('teachers', JSON.stringify(teachers));
+        store.set('teachers', teachers);
         saveAllDataToServer();
     }
 
     function renderTeacherList() {
         if (!teacherListContainer) return;
 
+        const searchVal = (document.getElementById('teacher-search')?.value || '').trim().toLowerCase();
+
         if (teachers.length === 0) {
             teacherListContainer.innerHTML = '<div class="empty-state">尚未新增任何教師</div>';
             return;
         }
 
-        teacherListContainer.innerHTML = teachers.map(teacher => `
+        const filteredTeachers = searchVal ? teachers.filter(t => t.name.toLowerCase().includes(searchVal)) : teachers;
+
+        if (filteredTeachers.length === 0) {
+            teacherListContainer.innerHTML = '<div class="empty-state">無符合的教師</div>';
+            return;
+        }
+
+        teacherListContainer.innerHTML = filteredTeachers.map(teacher => `
             <div class="teacher-card">
                 <div class="teacher-info">
                     <div class="teacher-icon">T</div>
@@ -1670,11 +2034,37 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.deleteTeacher = function (id) {
-        if (confirm('確定要刪除這位教師嗎？')) {
-            teachers = teachers.filter(t => t.id !== id);
+        const teacher = teachers.find(t => t.id === id);
+        if (!teacher) return;
+
+        // Save snapshot for undo
+        const deletedTeacher = JSON.parse(JSON.stringify(teacher));
+        const prevCourses = JSON.parse(JSON.stringify(courses));
+
+        // Perform delete
+        teachers = teachers.filter(t => t.id !== id);
+        const teacherName = teacher.name;
+        courses.forEach(course => {
+            if (!course.groupDetails) return;
+            Object.values(course.groupDetails).forEach(details => {
+                if (Array.isArray(details.teacher)) {
+                    details.teacher = details.teacher.filter(t => t !== teacherName);
+                } else if (details.teacher === teacherName) {
+                    details.teacher = [];
+                }
+            });
+        });
+        saveTeachers();
+        renderTeacherList();
+        renderCourseList();
+
+        showSnackbar(`已刪除教師「${teacherName}」`, function () {
+            teachers.push(deletedTeacher);
+            courses = prevCourses;
             saveTeachers();
             renderTeacherList();
-        }
+            renderCourseList();
+        });
     };
 
     // --- Grouping Functions ---
@@ -1707,7 +2097,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Initializing new assignments for course:', courseId);
             assignments[courseId] = {};
             course.groups.forEach(g => assignments[courseId][g] = []);
-            localStorage.setItem('assignments', JSON.stringify(assignments));
+            store.set('assignments', assignments);
         } else {
             // Validate existing structure and clean up if needed
             let needsCleanup = false;
@@ -1737,7 +2127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (needsCleanup) {
                 console.log('Cleaned up assignments structure');
-                localStorage.setItem('assignments', JSON.stringify(assignments));
+                store.set('assignments', assignments);
             }
         }
         // Render Group Columns
@@ -1887,7 +2277,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 匯出分組資料為CSV
     function exportGroupsCSV() {
         if (courses.length === 0) {
-            alert('目前沒有課程資料可匯出');
+            showSnackbar('目前沒有課程資料可匯出');
             return;
         }
 
@@ -2014,7 +2404,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Save and Re-render
-        localStorage.setItem('assignments', JSON.stringify(assignments));
+        store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
         renderMasterSchedule();
@@ -2042,18 +2432,39 @@ document.addEventListener('DOMContentLoaded', () => {
             courseAssignments[group] = courseAssignments[group].filter(id => id !== studentId);
         });
 
-        localStorage.setItem('assignments', JSON.stringify(assignments));
+        store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
         renderMasterSchedule();
     });
 
-    function closeModal() {
+    function forceCloseModal() {
+        modalDirty = false;
         modal.style.display = 'none';
         modalConfirm.onclick = null;
-        // Remove the clear/reset button when closing (only exists in Student Override Modal)
         const clearBtn = modal.querySelector('.btn-clear-override');
         if (clearBtn) clearBtn.remove();
+        const discardBar = modal.querySelector('.modal-discard-bar');
+        if (discardBar) discardBar.remove();
+    }
+
+    function closeModal() {
+        if (modalDirty) {
+            // Show inline discard confirmation bar if not already shown
+            if (modal.querySelector('.modal-discard-bar')) return;
+            const bar = document.createElement('div');
+            bar.className = 'modal-discard-bar';
+            bar.innerHTML = `
+                <span>有未儲存的變更，確定要放棄？</span>
+                <button class="btn-discard-confirm">放棄變更</button>
+                <button class="btn-discard-cancel">繼續編輯</button>
+            `;
+            bar.querySelector('.btn-discard-confirm').onclick = forceCloseModal;
+            bar.querySelector('.btn-discard-cancel').onclick = () => bar.remove();
+            modal.appendChild(bar);
+            return;
+        }
+        forceCloseModal();
     }
 
     // Global Helpers
@@ -2085,37 +2496,89 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.deleteCourse = function (id) {
-        if (confirm('確定要刪除這個課程嗎？')) {
-            courses = courses.filter(c => c.id !== id);
-            // Also clean up assignments
-            delete assignments[id];
-            localStorage.setItem('assignments', JSON.stringify(assignments));
+        const course = courses.find(c => c.id === id);
+        if (!course) return;
+
+        // Save snapshot for undo
+        const deletedCourse = JSON.parse(JSON.stringify(course));
+        const prevAssignments = JSON.parse(JSON.stringify(assignments));
+        const prevScheduleData = JSON.parse(JSON.stringify(scheduleData));
+        const prevSlotOverrides = JSON.parse(JSON.stringify(slotOverrides));
+
+        // Perform delete
+        courses = courses.filter(c => c.id !== id);
+        delete assignments[id];
+        Object.keys(scheduleData).forEach(slotKey => {
+            scheduleData[slotKey] = scheduleData[slotKey].filter(item => item.courseId !== id);
+            if (scheduleData[slotKey].length === 0) delete scheduleData[slotKey];
+        });
+        Object.keys(slotOverrides).forEach(slotKey => {
+            delete slotOverrides[slotKey][id];
+            if (Object.keys(slotOverrides[slotKey]).length === 0) delete slotOverrides[slotKey];
+        });
+        saveAllDataToServer();
+        saveCourses();
+        renderCourseList();
+        updateGroupingCourseSelect();
+        renderMasterSchedule();
+
+        showSnackbar(`已刪除課程「${course.name}」`, function () {
+            courses.push(deletedCourse);
+            assignments = prevAssignments;
+            scheduleData = prevScheduleData;
+            slotOverrides = prevSlotOverrides;
             saveAllDataToServer();
             saveCourses();
             renderCourseList();
             updateGroupingCourseSelect();
             renderMasterSchedule();
-        }
+        });
     };
 
     window.deleteStudent = function (id) {
-        if (confirm('確定要刪除這位學生嗎？')) {
-            students = students.filter(s => s.id !== id);
-            // Clean up assignments
-            Object.keys(assignments).forEach(cId => {
-                Object.keys(assignments[cId]).forEach(gName => {
-                    assignments[cId][gName] = assignments[cId][gName].filter(sId => sId !== id);
+        const student = students.find(s => s.id === id);
+        if (!student) return;
+
+        // Save snapshot for undo
+        const deletedStudent = JSON.parse(JSON.stringify(student));
+        const prevAssignments = JSON.parse(JSON.stringify(assignments));
+        const prevSlotOverrides = JSON.parse(JSON.stringify(slotOverrides));
+
+        // Perform delete
+        students = students.filter(s => s.id !== id);
+        Object.keys(assignments).forEach(cId => {
+            Object.keys(assignments[cId]).forEach(gName => {
+                assignments[cId][gName] = assignments[cId][gName].filter(sId => sId !== id);
+            });
+        });
+        Object.keys(slotOverrides).forEach(slotKey => {
+            Object.keys(slotOverrides[slotKey]).forEach(cId => {
+                Object.keys(slotOverrides[slotKey][cId]).forEach(gName => {
+                    const val = slotOverrides[slotKey][cId][gName];
+                    if (Array.isArray(val)) {
+                        slotOverrides[slotKey][cId][gName] = val.filter(sId => sId !== id);
+                    }
                 });
             });
-            localStorage.setItem('assignments', JSON.stringify(assignments));
+        });
+        saveAllDataToServer();
+        saveStudents();
+        renderStudentList();
+        if (groupingCourseSelect.value) {
+            renderGroupingWorkspace(parseInt(groupingCourseSelect.value));
+        }
+
+        showSnackbar(`已刪除學生「${student.name}」`, function () {
+            students.push(deletedStudent);
+            assignments = prevAssignments;
+            slotOverrides = prevSlotOverrides;
             saveAllDataToServer();
             saveStudents();
             renderStudentList();
-            // If currently viewing a course, refresh the workspace
             if (groupingCourseSelect.value) {
                 renderGroupingWorkspace(parseInt(groupingCourseSelect.value));
             }
-        }
+        });
     };
 
     // --- Schedule Drag & Drop Functions ---
@@ -2183,6 +2646,12 @@ document.addEventListener('DOMContentLoaded', () => {
             courseBlocksContainer.querySelectorAll('.course-block').forEach(block => {
                 block.addEventListener('dragstart', handleBlockDragStart);
                 block.addEventListener('dragend', handleBlockDragEnd);
+                // Touch drag support
+                attachTouchDrag(block, (el) => ({
+                    courseId: parseInt(el.dataset.courseId),
+                    courseName: el.dataset.courseName,
+                    fromPool: true
+                }));
             });
         }
     }
@@ -2203,12 +2672,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (slotItems && slotItems.length > 0) {
-                let slotHtml = '';
+                const count = slotItems.length;
+                const isFull = count >= 5;
+                let slotHtml = `<span class="slot-count-badge${isFull ? ' full' : ''}">${count}/5</span>`;
                 slotItems.forEach((item, index) => {
                     const course = courses.find(c => c.id === item.courseId);
                     if (course) {
                         slotHtml += `
-                            <div class="course-card draggable" 
+                            <div class="course-card draggable"
                                  draggable="true"
                                  data-slot-key="${slotKey}"
                                  data-item-index="${index}">
@@ -2225,6 +2696,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 cards.forEach(card => {
                     card.addEventListener('dragstart', handlePlacedCardDragStart);
                     card.addEventListener('dragend', handleBlockDragEnd);
+                    // Touch drag support
+                    attachTouchDrag(card, (el) => {
+                        const sk = el.dataset.slotKey;
+                        const idx = parseInt(el.dataset.itemIndex);
+                        let items = scheduleData[sk];
+                        if (!Array.isArray(items)) items = [items];
+                        return { ...(items[idx] || {}), fromPool: false, originalSlotKey: sk, originalIndex: idx };
+                    });
                 });
             } else {
                 slot.innerHTML = '';
@@ -2268,6 +2747,119 @@ document.addEventListener('DOMContentLoaded', () => {
         e.target.classList.remove('dragging');
     }
 
+    // ===== Touch Drag-and-Drop Support =====
+    let touchDragData = null;
+    let touchGhost = null;
+
+    function createTouchGhost(el) {
+        const ghost = el.cloneNode(true);
+        ghost.style.cssText = `
+            position: fixed; z-index: 9999; pointer-events: none;
+            opacity: 0.85; transform: scale(1.05);
+            border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            width: ${el.offsetWidth}px; transition: none;
+        `;
+        document.body.appendChild(ghost);
+        return ghost;
+    }
+
+    function getTouchSlot(x, y) {
+        // Temporarily hide ghost to get element below
+        if (touchGhost) touchGhost.style.display = 'none';
+        const el = document.elementFromPoint(x, y);
+        if (touchGhost) touchGhost.style.display = '';
+        if (!el) return null;
+        return el.closest('.course-group-container[data-day][data-period]');
+    }
+
+    function attachTouchDrag(el, getData) {
+        el.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            const touch = e.touches[0];
+            touchDragData = getData(el);
+            touchGhost = createTouchGhost(el);
+            const rect = el.getBoundingClientRect();
+            touchGhost._offsetX = touch.clientX - rect.left;
+            touchGhost._offsetY = touch.clientY - rect.top;
+            touchGhost.style.left = (touch.clientX - touchGhost._offsetX) + 'px';
+            touchGhost.style.top = (touch.clientY - touchGhost._offsetY) + 'px';
+            el.classList.add('dragging');
+            e.preventDefault();
+        }, { passive: false });
+
+        el.addEventListener('touchmove', (e) => {
+            if (!touchDragData || !touchGhost) return;
+            const touch = e.touches[0];
+            touchGhost.style.left = (touch.clientX - touchGhost._offsetX) + 'px';
+            touchGhost.style.top = (touch.clientY - touchGhost._offsetY) + 'px';
+
+            // Highlight drop target
+            document.querySelectorAll('.course-group-container.drop-target').forEach(s => s.classList.remove('drop-target'));
+            const slot = getTouchSlot(touch.clientX, touch.clientY);
+            if (slot) slot.classList.add('drop-target');
+            e.preventDefault();
+        }, { passive: false });
+
+        el.addEventListener('touchend', (e) => {
+            if (!touchDragData || !touchGhost) return;
+            const touch = e.changedTouches[0];
+
+            document.querySelectorAll('.course-group-container.drop-target').forEach(s => s.classList.remove('drop-target'));
+            el.classList.remove('dragging');
+            touchGhost.remove();
+            touchGhost = null;
+
+            const slot = getTouchSlot(touch.clientX, touch.clientY);
+            if (slot) {
+                handleTouchDrop(slot, touchDragData);
+            }
+            touchDragData = null;
+        });
+    }
+
+    function handleTouchDrop(slotEl, blockData) {
+        const day = slotEl.dataset.day;
+        const period = slotEl.dataset.period;
+        const slotKey = `${day}-${period}`;
+
+        if (!scheduleData[slotKey]) {
+            scheduleData[slotKey] = [];
+        } else if (!Array.isArray(scheduleData[slotKey])) {
+            scheduleData[slotKey] = [scheduleData[slotKey]];
+        }
+
+        const isReordering = !blockData.fromPool && blockData.originalSlotKey === slotKey;
+        if (!isReordering && scheduleData[slotKey].length >= 5) {
+            showSnackbar('該時段已滿，無法再加入課程！(上限 5 堂)');
+            return;
+        }
+
+        if (!blockData.fromPool && blockData.originalSlotKey) {
+            const originalItems = scheduleData[blockData.originalSlotKey];
+            if (Array.isArray(originalItems)) {
+                originalItems.splice(blockData.originalIndex, 1);
+                if (originalItems.length === 0) delete scheduleData[blockData.originalSlotKey];
+            } else {
+                delete scheduleData[blockData.originalSlotKey];
+            }
+        }
+
+        let newBlockIndex = 0;
+        if (blockData.fromPool) {
+            let usedBlocks = 0;
+            Object.values(scheduleData).forEach(slotItems => {
+                if (Array.isArray(slotItems)) usedBlocks += slotItems.filter(i => i.courseId === blockData.courseId).length;
+                else if (slotItems && slotItems.courseId === blockData.courseId) usedBlocks++;
+            });
+            newBlockIndex = usedBlocks;
+        }
+
+        scheduleData[slotKey].push({ courseId: blockData.courseId, blockIndex: newBlockIndex });
+        saveScheduleData();
+        renderSchedule();
+        renderCourseBlocks();
+    }
+
     // Handle drag over schedule slot
     function handleScheduleDragOver(e) {
         e.preventDefault();
@@ -2305,7 +2897,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Limit to 5 courses per slot (was 2)
             if (!isReordering && scheduleData[slotKey].length >= 5) {
-                alert('該時段已滿，無法再加入課程！(上限 5 堂)');
+                showSnackbar('該時段已滿，無法再加入課程！(上限 5 堂)');
                 return;
             }
 
@@ -2345,7 +2937,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Save and re-render
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
             renderSchedule();
             renderCourseBlocks();
@@ -2365,7 +2957,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete scheduleData[slotKey];
             }
 
-            localStorage.setItem('scheduleData', JSON.stringify(scheduleData));
+            store.set('scheduleData', scheduleData);
             saveAllDataToServer();
             renderSchedule();
             renderCourseBlocks();
@@ -3471,7 +4063,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         modalConfirm.onclick = () => saveStudentManualEntry(studentId, slotKey);
-        modal.style.display = 'block';
+        modal.style.display = 'block'; modalDirty = false;
     };
 
     window.saveStudentManualEntry = function (studentId, slotKey) {
@@ -3501,7 +4093,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        localStorage.setItem('studentManualEntries', JSON.stringify(studentManualEntries));
+        store.set('studentManualEntries', studentManualEntries);
         generateStudentSchedules();
         closeModal();
         saveAllDataToServer();
@@ -3628,7 +4220,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         modalFooter.insertBefore(resetBtn, modalFooter.firstChild);
 
-        modal.style.display = 'block';
+        modal.style.display = 'block'; modalDirty = false;
     };
 
 
@@ -3672,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay('正在更新課表...');
 
         // Save to localStorage
-        localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+        store.set('slotOverrides', slotOverrides);
 
         // Force re-render with loading feedback
         setTimeout(() => {
@@ -3774,7 +4366,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete slotOverrides[slotKey];
             }
 
-            localStorage.setItem('slotOverrides', JSON.stringify(slotOverrides));
+            store.set('slotOverrides', slotOverrides);
             saveAllDataToServer();
 
             // Refresh with delay
@@ -3993,7 +4585,7 @@ document.addEventListener('DOMContentLoaded', () => {
         teacherPartTimeMarks[teacherName][slotKey] = !teacherPartTimeMarks[teacherName][slotKey];
 
         // Save to localStorage
-        localStorage.setItem('teacherPartTimeMarks', JSON.stringify(teacherPartTimeMarks));
+        store.set('teacherPartTimeMarks', teacherPartTimeMarks);
 
         // Regenerate teacher schedules to reflect the change
         generateTeacherSchedules();
@@ -4417,7 +5009,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Export Error:', error);
-            alert('匯出失敗: ' + error.message);
+            showSnackbar('匯出失敗: ' + error.message);
         } finally {
             btn.textContent = originalText;
             btn.disabled = false;
@@ -4568,7 +5160,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             console.error(e);
-            alert('匯出失敗: ' + e.message);
+            showSnackbar('匯出失敗: ' + e.message);
         } finally {
             btn.textContent = originalText;
             btn.disabled = false;
@@ -4661,7 +5253,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             console.error(e);
-            alert('匯出失敗: ' + e.message);
+            showSnackbar('匯出失敗: ' + e.message);
         } finally {
             btn.textContent = originalText;
             btn.disabled = false;
@@ -4692,7 +5284,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. Filter Students
             const validStudents = students.filter(s => s && s.name);
             if (validStudents.length === 0) {
-                alert('無學生資料可匯出');
+                showSnackbar('無學生資料可匯出');
                 return;
             }
 
@@ -4796,7 +5388,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             console.error(e);
-            alert('匯出失敗: ' + e.message);
+            showSnackbar('匯出失敗: ' + e.message);
         } finally {
             btn.textContent = originalText;
             btn.disabled = false;
@@ -4817,7 +5409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 1. Check for unsupported types (Master, Classroom Integrated, Classroom)
             if (scheduleType === 'master' || scheduleType === 'classroom_integrated' || scheduleType === 'classroom') {
-                alert('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
+                showSnackbar('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
                 return;
             }
 
@@ -4835,7 +5427,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             console.error(e);
-            alert('匯出失敗: ' + e.message);
+            showSnackbar('匯出失敗: ' + e.message);
         } finally {
             btn.textContent = originalText;
             btn.disabled = false;

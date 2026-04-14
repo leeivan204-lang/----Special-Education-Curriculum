@@ -7,6 +7,31 @@
     --hover-color: #e1e8ef;
     --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     --slot-height: 120px;
+
+    /* Text colors */
+    --text-dark: #333;
+    --text-muted: #666;
+    --text-placeholder: #999;
+
+    /* Border colors */
+    --border-dark: #000;
+    --border-light: #ddd;
+    --border-medium: #e5e7eb;
+
+    /* Background colors */
+    --bg-white: #fff;
+    --bg-light: #f0f0f0;
+    --bg-subtle: #f9f9f9;
+
+    /* Accent / semantic colors */
+    --accent-orange: #d35400;
+    --danger-color: #e74c3c;
+    --danger-bg: #ef4444;
+    --danger-hover: #dc2626;
+    --highlight-blue: #e3f2fd;
+
+    /* Sidebar gradient */
+    --sidebar-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 * {
@@ -148,7 +173,7 @@ body {
     border-radius: 8px;
     box-shadow: var(--card-shadow);
     overflow: hidden;
-    border: 2px solid #000;
+    border: 2px solid var(--border-dark);
 }
 
 .schedule-table {
@@ -159,13 +184,13 @@ body {
 
 .schedule-table th,
 .schedule-table td {
-    border: 1px solid #000;
+    border: 1px solid var(--border-dark);
     padding: 0;
     vertical-align: top;
 }
 
 .schedule-table th {
-    background-color: #f8f9fa;
+    background-color: var(--header-bg);
     padding: 10px;
     font-weight: bold;
     text-align: center;
@@ -173,7 +198,7 @@ body {
 
 .col-period {
     width: 120px;
-    background-color: #f8f9fa;
+    background-color: var(--header-bg);
 }
 
 .period-cell {
@@ -192,7 +217,7 @@ body {
 
 .period-time {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-muted);
 }
 
 .course-group-container {
@@ -206,7 +231,7 @@ body {
 }
 
 .course-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--sidebar-gradient);
     padding: 6px 8px;
     border-radius: 6px;
     color: white;
@@ -362,7 +387,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 1rem;
-    background-color: #f9f9f9;
+    background-color: var(--bg-subtle);
     max-height: 400px;
     overflow-y: auto;
 }
@@ -437,7 +462,7 @@ body {
 }
 
 .group-drop-zone.drag-over {
-    background-color: #e3f2fd;
+    background-color: var(--highlight-blue);
 }
 
 .student-pool-container {
@@ -533,7 +558,7 @@ body {
     background: #f5f6f8;
     border-radius: 8px;
     padding: 1.2rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-medium);
     min-height: 150px;
     display: flex;
     flex-direction: column;
@@ -561,7 +586,7 @@ body {
     padding: 0.6rem 0.8rem;
     background: white;
     border-radius: 6px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-medium);
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -613,6 +638,7 @@ body {
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    position: relative;
 }
 
 .modal-header {
@@ -634,7 +660,7 @@ body {
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    color: #999;
+    color: var(--text-placeholder);
     width: 30px;
     height: 30px;
     display: flex;
@@ -644,8 +670,8 @@ body {
 }
 
 .modal-close:hover {
-    background-color: #f0f0f0;
-    color: #333;
+    background-color: var(--bg-light);
+    color: var(--text-dark);
 }
 
 .modal-body {
@@ -705,7 +731,7 @@ body {
 .btn-delete {
     background: none;
     border: none;
-    color: #e74c3c;
+    color: var(--danger-color);
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
@@ -742,7 +768,7 @@ body {
     max-height: 150px;
     overflow-y: auto;
     padding: 1rem;
-    background: #f9f9f9;
+    background: var(--bg-subtle);
     border-radius: 6px;
     border: 2px dashed var(--border-color);
 }
@@ -754,7 +780,7 @@ body {
 }
 
 .course-block {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--sidebar-gradient);
     padding: 12px;
     border-radius: 6px;
     color: white;
@@ -796,12 +822,12 @@ body {
 
 /* �躰��剖�鞈∵狗?��𨯙�躰��剖�頦肽𨯙??????�躰��剖�鞈∵��躰��剖�頦肽𨯙??? */
 .course-group-container.drop-target {
-    background-color: #e3f2fd !important;
+    background-color: var(--highlight-blue) !important;
     border: 2px dashed var(--primary-color) !important;
 }
 
 .course-group-container.occupied {
-    background-color: #fff;
+    background-color: var(--bg-white);
 }
 
 /* �躰��剖�鞈∵狗?��𨯙�躰��剖�鞈�?�躰���??�躰��剖�鞈∵��躰��剖�頦肽𨯙????????????*/
@@ -904,7 +930,7 @@ body {
 }
 
 .schedule-title-inputs input {
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     padding: 0.4rem 0.6rem;
     font-size: 1rem;
@@ -949,7 +975,7 @@ body {
     }
 
     .lunch-separator td {
-        border-top: 5px double #000 !important;
+        border-top: 5px double var(--border-dark) !important;
     }
 }
 
@@ -1042,12 +1068,12 @@ body {
 .schedule-title-inputs .title-input-text {
     width: auto;
     min-width: 100px;
-    border-bottom: 1px solid #000;
+    border-bottom: 1px solid var(--border-dark);
 }
 
 .schedule-title-inputs .title-input-number {
     width: 50px;
-    border-bottom: 1px solid #000;
+    border-bottom: 1px solid var(--border-dark);
 }
 
 /* �躰���?撠滩𨯙?畾瑁𨯙�躰��剖�頦肽𨯙?? */
@@ -1059,14 +1085,14 @@ body {
 
 .schedule-table th,
 .schedule-table td {
-    border: 1px solid #000;
+    border: 1px solid var(--border-dark);
     padding: 2px;
     text-align: center;
     vertical-align: middle;
 }
 
 .schedule-table th {
-    background-color: #f0f0f0 !important;
+    background-color: var(--bg-light) !important;
     font-size: 12pt;
     padding: 5px;
 }
@@ -1086,7 +1112,7 @@ body {
 
 .period-time {
     font-size: 9pt;
-    color: #333;
+    color: var(--text-dark);
 }
 
 /* �躰���?撠滩𨯙�躰��剖�頦肽𨯙??�躰��剖�鞈∵��躰��剖�頦肽𨯙? */
@@ -1098,7 +1124,7 @@ body {
 .course-card {
     padding: 2px 4px;
     border-radius: 4px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: var(--sidebar-gradient) !important;
     color: white !important;
     border: none;
 }
@@ -1118,12 +1144,12 @@ body {
 
 /* �躰���?�瘀��躰���?鞈�𨯙?�𡏭𨯙�躰��剖�頦肽𨯙??�躰��剖�鞈�?�躰部謘��頦肽𨯙�躰���?*/
 .master-schedule-table th {
-    background-color: #f0f0f0 !important;
+    background-color: var(--bg-light) !important;
 }
 
 .master-schedule-table th,
 .master-schedule-table td {
-    border: 1px solid #000;
+    border: 1px solid var(--border-dark);
     padding: 0.4rem;
 }
 
@@ -1158,16 +1184,16 @@ body {
 
 .master-schedule-table th,
 .master-schedule-table td {
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-light);
     padding: 0.8rem;
     text-align: center;
     vertical-align: top;
 }
 
 .master-schedule-table th {
-    background-color: #f8f9fa;
+    background-color: var(--header-bg);
     font-weight: 600;
-    color: #333;
+    color: var(--text-dark);
     white-space: nowrap;
 }
 
@@ -1178,7 +1204,7 @@ body {
 
 /* ?�躰��剖�鞈∵��躰��剖�頦肽𨯙??�躰��剖�鞈�?��?�躰��剖�?�躰��剖�?*/
 .master-group-block {
-    background: #f9f9f9;
+    background: var(--bg-subtle);
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 0.8rem;
@@ -1196,12 +1222,12 @@ body {
     color: var(--primary-color);
     margin-bottom: 0.5rem;
     padding-bottom: 0.3rem;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border-light);
 }
 
 .master-group-info {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
     line-height: 1.4;
 }
@@ -1225,7 +1251,7 @@ body {
 
 /* �躰��剖�鞈軋�����剖�???*/
 .master-schedule-table .empty-cell {
-    color: #999;
+    color: var(--text-placeholder);
     font-style: italic;
     font-size: 0.9rem;
 }
@@ -1234,7 +1260,7 @@ body {
 /* 蝮質玨銵典��港�撅�璅�� */
 .master-group-info-vertical {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
 }
 
@@ -1283,8 +1309,8 @@ body {
 
     .master-group-block {
         page-break-inside: avoid;
-        background: #f9f9f9 !important;
-        border: 1px solid #000 !important;
+        background: var(--bg-subtle) !important;
+        border: 1px solid var(--border-dark) !important;
     }
 
     .master-group-header {
@@ -1462,7 +1488,7 @@ body {
 
     #schedule-view .schedule-table th,
     #schedule-view .schedule-table td {
-        border: 1px solid #000 !important;
+        border: 1px solid var(--border-dark) !important;
         padding: 0.4rem;
         text-align: center;
         vertical-align: middle;
@@ -1471,7 +1497,7 @@ body {
     }
 
     #schedule-view .schedule-table th {
-        background-color: #f0f0f0 !important;
+        background-color: var(--bg-light) !important;
         font-weight: bold;
     }
 
@@ -1493,7 +1519,7 @@ body {
 
     #schedule-view .period-time {
         font-size: 9pt;
-        color: #333;
+        color: var(--text-dark);
         display: block;
     }
 
@@ -1518,7 +1544,7 @@ body {
     #schedule-view .course-teacher,
     #schedule-view .course-group {
         font-size: 9pt;
-        color: #333 !important;
+        color: var(--text-dark) !important;
     }
 
     #schedule-view .btn-remove {
@@ -1555,14 +1581,14 @@ body {
     .print-schedule-table td {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-        border: 1px solid #000 !important;
+        border: 1px solid var(--border-dark) !important;
     }
 }
 
 .part-time-mark {
     background-color: #FED7AA !important;
     border: 1px solid #d97706 !important;
-    color: #000 !important;
+    color: var(--border-dark) !important;
     /* Ensure text is readable */
 }
 
@@ -1673,7 +1699,7 @@ body {
     body.print-general-mode .master-schedule-table td {
         padding: 0.1rem !important;
         font-size: 12pt !important;
-        border: 1px solid #ddd !important;
+        border: 1px solid var(--border-light) !important;
     }
 
     /* Remove padding for split layouts via class, force height expansion */
@@ -1693,7 +1719,7 @@ body {
         width: 15% !important;
         font-size: 10pt !important;
         vertical-align: top !important;
-        border-right: 2px solid #000 !important;
+        border-right: 2px solid var(--border-dark) !important;
     }
 
     /* Hide print table on web, show web table */
@@ -1755,7 +1781,7 @@ body {
         display: flex !important;
         flex-direction: column !important;
         justify-content: flex-start !important;
-        border: 1px dashed #000 !important;
+        border: 1px dashed var(--border-dark) !important;
         /* Update: Dashed border for internal blocks */
     }
 
@@ -1815,7 +1841,7 @@ body {
 
     .print-table th,
     .print-table td {
-        border: 1px solid #000 !important;
+        border: 1px solid var(--border-dark) !important;
     }
 
     /* Stats Table */
@@ -1826,7 +1852,7 @@ body {
     }
 
     .print-stats-table td {
-        border: 1px solid #000 !important;
+        border: 1px solid var(--border-dark) !important;
         padding: 5px;
         text-align: center;
     }
@@ -1863,7 +1889,7 @@ body {
 }
 
 .manual-content {
-    color: #d35400;
+    color: var(--accent-orange);
     font-weight: 500;
 }
 
@@ -2010,7 +2036,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 
 .print-table th,
 .print-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
 }
 
 /* Stats Table */
@@ -2021,7 +2047,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 }
 
 .print-stats-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
     padding: 5px;
     text-align: center;
 }
@@ -2059,7 +2085,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 /* End of print settings block */
 
 .manual-content {
-    color: #d35400;
+    color: var(--accent-orange);
     font-weight: 500;
 }
 
@@ -2128,7 +2154,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
     grid-area: groupA !important;
-    border-left: 1px dashed #666 !important;
+    border-left: 1px dashed var(--text-muted) !important;
     border-bottom: none !important;
     border-top: none !important;
     border-right: none !important;
@@ -2140,7 +2166,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
     grid-area: groupB !important;
-    border-bottom: 1px dashed #666 !important;
+    border-bottom: 1px dashed var(--text-muted) !important;
     border-right: none !important;
     border-left: none !important;
     border-top: none !important;
@@ -2205,7 +2231,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 
 .print-table th,
 .print-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
 }
 
 /* Stats Table */
@@ -2216,7 +2242,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 }
 
 .print-stats-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
     padding: 5px;
     text-align: center;
 }
@@ -2254,7 +2280,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 /* End of print settings block */
 
 .manual-content {
-    color: #d35400;
+    color: var(--accent-orange);
     font-weight: 500;
 }
 
@@ -2323,7 +2349,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
     grid-area: groupA !important;
-    border-left: 1px dashed #666 !important;
+    border-left: 1px dashed var(--text-muted) !important;
     border-bottom: none !important;
     border-top: none !important;
     border-right: none !important;
@@ -2335,7 +2361,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
     grid-area: groupB !important;
-    border-bottom: 1px dashed #666 !important;
+    border-bottom: 1px dashed var(--text-muted) !important;
     border-right: none !important;
     border-left: none !important;
     border-top: none !important;
@@ -2400,7 +2426,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 
 .print-table th,
 .print-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
 }
 
 /* Stats Table */
@@ -2411,7 +2437,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 }
 
 .print-stats-table td {
-    border: 1px solid #000 !important;
+    border: 1px solid var(--border-dark) !important;
     padding: 5px;
     text-align: center;
 }
@@ -2449,7 +2475,7 @@ body.print-teacher-mode .teacher-print-page:last-child {
 /* End of print settings block */
 
 .manual-content {
-    color: #d35400;
+    color: var(--accent-orange);
     font-weight: 500;
 }
 
@@ -2518,7 +2544,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 1 (Group A): Assigned to 'groupA' area (Right Side) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(1) {
     grid-area: groupA !important;
-    border-left: 1px dashed #666 !important;
+    border-left: 1px dashed var(--text-muted) !important;
     border-bottom: none !important;
     border-top: none !important;
     border-right: none !important;
@@ -2530,7 +2556,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Item 2 (Group B): Assigned to 'groupB' area (Top Left) */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-3> :nth-child(2) {
     grid-area: groupB !important;
-    border-bottom: 1px dashed #666 !important;
+    border-bottom: 1px dashed var(--text-muted) !important;
     border-right: none !important;
     border-left: none !important;
     border-top: none !important;
@@ -2587,7 +2613,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 
 /* Item 1 (Left): Add Dashed Divider on Right */
 body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-2> :nth-child(1) {
-    border-right: 1px dashed #000 !important;
+    border-right: 1px dashed var(--border-dark) !important;
 }
 
 /* Item 2 (Right): No border */
@@ -2659,14 +2685,14 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     }
 
     .student-schedule-print .student-table {
-        border: 2px solid #000;
+        border: 2px solid var(--border-dark);
         width: 100%;
         border-collapse: collapse;
     }
 
     .student-schedule-print .student-table th,
     .student-schedule-print .student-table td {
-        border: 1px solid #000;
+        border: 1px solid var(--border-dark);
         text-align: center;
         vertical-align: middle;
         padding: 4px;
@@ -2734,7 +2760,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     }
 
     .student-schedule-print .lunch-separator td {
-        border-top: 5px double #000 !important;
+        border-top: 5px double var(--border-dark) !important;
     }
 
     .student-schedule-print .vertical-text {
@@ -2755,7 +2781,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 /* Edit Hint Styles (Screen) */
 .edit-hint {
     font-size: 0.8rem;
-    color: #999;
+    color: var(--text-placeholder);
     margin-top: 4px;
     display: block;
 }
@@ -2786,7 +2812,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     height: 20px;
     border-radius: 50%;
     background-color: rgba(0, 0, 0, 0.1);
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.8rem;
     cursor: pointer;
     margin-left: 5px;
@@ -2851,7 +2877,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 }
 
 .student-checkbox-item.checked {
-    background-color: #e3f2fd;
+    background-color: var(--highlight-blue);
     border-color: #90caf9;
 }
 
@@ -2873,10 +2899,10 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 
 .override-status {
     padding: 0.8rem;
-    background: #f8f9fa;
+    background: var(--header-bg);
     border-radius: 4px;
     margin-top: 0.5rem;
-    color: #666;
+    color: var(--text-muted);
 }
 
 .override-status.active {
@@ -2945,13 +2971,13 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        border: 3px solid #000;
+        border: 3px solid var(--border-dark);
         /* Thick outer border */
     }
 
     .classroom-print-table th,
     .classroom-print-table td {
-        border: 1px solid #000;
+        border: 1px solid var(--border-dark);
         text-align: center;
         vertical-align: middle;
         padding: 2px;
@@ -3099,7 +3125,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
 .login-message {
     margin-top: 1rem;
     font-size: 0.9rem;
-    color: #e74c3c;
+    color: var(--danger-color);
     min-height: 1.2em;
 }
 
@@ -3129,7 +3155,7 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     justify-content: center;
     padding: 0.5rem 1rem;
     margin: 1rem;
-    background-color: #f8f9fa;
+    background-color: var(--header-bg);
     border: 2px dashed #cbd5e1;
     border-radius: 12px;
     color: #64748b;
@@ -3152,5 +3178,263 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* ===== Snackbar 吐司通知 ===== */
+#snackbar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #323232;
+    color: var(--bg-white);
+    padding: 12px 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 99999;
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    max-width: 480px;
+    white-space: nowrap;
+}
+#snackbar.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+.snackbar-undo {
+    background: none;
+    border: none;
+    color: #4fc3f7;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.snackbar-undo:hover { color: #81d4fa; }
+
+/* ===== Modal 行內錯誤訊息 ===== */
+.modal-error-msg {
+    display: none;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    color: var(--danger-hover);
+    font-size: 0.875rem;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+/* Modal footer 固定不隨內容滾動 */
+.modal-footer { flex-shrink: 0; }
+
+/* ===== 課表格節次計數徽章 ===== */
+.slot-count-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    pointer-events: none;
+    line-height: 1;
+}
+.slot-count-badge.full {
+    color: var(--danger-bg);
+    font-weight: 700;
+}
+.schedule-slot { position: relative; }
+
+/* ===== 列表搜尋框 ===== */
+.list-search-input {
+    width: 100%;
+    padding: 6px 10px 6px 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    outline: none;
+    background: var(--header-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+}
+.list-search-input:focus { border-color: var(--primary-color); background-color: var(--bg-white); }
+
+/* ===== 批次新增學生 ===== */
+.batch-add-area {
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: #fafafa;
+}
+.batch-add-area textarea {
+    width: 100%;
+    min-height: 90px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.85rem;
+    resize: vertical;
+    font-family: inherit;
+}
+.batch-add-area .batch-hint {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+/* ===== Modal 放棄變更確認列 ===== */
+.modal-discard-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff7ed;
+    border-top: 2px solid #f97316;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.875rem;
+    color: #9a3412;
+    z-index: 10;
+    border-radius: 0 0 8px 8px;
+}
+.modal-discard-bar span { flex: 1; }
+.btn-discard-confirm {
+    background: var(--danger-bg);
+    color: var(--bg-white);
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+.btn-discard-confirm:hover { background: var(--danger-hover); }
+.btn-discard-cancel {
+    background: var(--border-medium);
+    color: #374151;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+.btn-discard-cancel:hover { background: #d1d5db; }
+
+/* ===== P2: 手機響應式版面 ===== */
+@media (max-width: 768px) {
+    /* 主版面改為縱向 */
+    .app-container {
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 100vh;
+    }
+
+    /* 側邊欄橫向導覽列 */
+    .sidebar {
+        width: 100% !important;
+        height: auto !important;
+        flex-direction: column !important;
+        padding: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        overflow-y: visible;
+    }
+    .sidebar-header { display: none; }
+    .sidebar-nav {
+        flex-direction: row !important;
+        flex-wrap: wrap;
+        gap: 2px;
+        padding: 6px 8px;
+        overflow-x: auto;
+    }
+    .sidebar-nav .nav-btn {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    .nav-btn .icon { display: none; }
+    .nav-utility-item { display: none !important; }
+    .sidebar .version-info,
+    .sidebar .sidebar-divider,
+    .sidebar hr,
+    #save-status-indicator { display: none !important; }
+    /* Compact cloud backup and logout in the nav row */
+    #btn-cloud-backup, #btn-logout {
+        flex: 0 0 auto;
+        padding: 5px 8px !important;
+        font-size: 0.75rem !important;
+        white-space: nowrap;
+    }
+
+    .main-content {
+        padding: 0.75rem;
+        flex: 1;
+    }
+
+    /* 課表格 — 水平捲動 */
+    .schedule-grid-wrapper,
+    .schedule-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .schedule-grid,
+    table.schedule-table {
+        min-width: 560px;
+    }
+
+    /* 課程池橫排捲動 */
+    .course-pool {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        padding-bottom: 6px;
+    }
+    .course-block { flex-shrink: 0; }
+
+    /* Modal 全屏 */
+    .modal-content {
+        width: 96vw;
+        max-width: 96vw;
+        max-height: 90vh;
+        margin: 5vh auto;
+        overflow-y: auto;
+    }
+
+    /* 學生/教師卡片 */
+    .student-card, .teacher-card {
+        padding: 8px 10px;
+        font-size: 0.9rem;
+    }
+
+    /* 表單 */
+    .form-group label { font-size: 0.85rem; }
+    .form-control { font-size: 0.9rem; }
+
+    /* view-header 排列 */
+    .view-header {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .view-header h2 { font-size: 1.1rem; }
+
+    /* 按鈕縮小 */
+    .btn-primary, .btn-secondary {
+        padding: 6px 10px;
+        font-size: 0.82rem;
+    }
+
+    /* 搜尋框 */
+    .list-search-input {
+        font-size: 0.85rem;
     }
 }

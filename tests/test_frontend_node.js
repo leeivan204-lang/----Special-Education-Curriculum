@@ -7,6 +7,12 @@ global.window = global;
 global.window.addEventListener = (event, callback) => {
     // Mock implementation
 };
+global.window.location = {
+    protocol: 'http:',
+    hostname: 'localhost',
+    reload: () => {}
+};
+global.location = global.window.location;
 global.self = global;
 
 // Mock LocalStorage
@@ -363,9 +369,14 @@ async function runSyncTests() {
     assert(fetchCalled, 'Triggered saveAllDataToServer');
 
     // Execute with reload=true (default)
+    // restoreData uses setTimeout(() => location.reload(), 1500)
+    // so we need to capture the timer and fast-forward it
     let reloadCalled = false;
-    global.location.reload = () => { reloadCalled = true; };
+    global.window.location.reload = () => { reloadCalled = true; };
+    const origSetTimeout = global.setTimeout;
+    global.setTimeout = (fn, _ms) => { fn(); }; // Execute immediately
     restoreData(backupData, true);
+    global.setTimeout = origSetTimeout; // Restore
     assert(reloadCalled, 'Triggered location.reload()');
 
     // Test 5: Partial Data Handling (Defaults)

@@ -5,6 +5,10 @@ const path = require('path');
 // --- Mock Browser Environment ---
 global.window = global;
 global.window.addEventListener = () => { };
+global.window.location = {
+    protocol: 'http:',
+    hostname: 'localhost'
+};
 global.self = global;
 
 // Mock LocalStorage
