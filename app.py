@@ -433,10 +433,17 @@ GAS_WEBHOOK_URL = os.environ.get(
 )
 GAS_ENABLED = bool(GAS_WEBHOOK_URL)
 
+# 記錄哪些 user_id 已確認 GAS 無備份（避免每次登入都去 hit GAS）
+_gas_empty_cache = set()
+_gas_empty_cache_lock = threading.Lock()
+
 def push_to_gas_async(user_id, data):
     """背景執行緒推送資料到 GAS Google Sheet，不阻塞主請求。"""
     if not GAS_ENABLED:
         return
+    # 既然有新備份推出，清除「無備份」快取，下次冷啟動可正確還原
+    with _gas_empty_cache_lock:
+        _gas_empty_cache.discard(user_id)
     def _push():
         try:
             payload = dict(data) if isinstance(data, dict) else {}
@@ -456,10 +463,14 @@ def push_to_gas_async(user_id, data):
     t = threading.Thread(target=_push, daemon=True, name=f"gas-push-{user_id}")
     t.start()
 
-def pull_from_gas(user_id, timeout=8):
+def pull_from_gas(user_id, timeout=4):
     """從 GAS 取得該 userId 的最新備份資料。找不到或失敗時回傳 None。"""
     if not GAS_ENABLED:
         return None
+    # 若此 user_id 先前已確認無備份，直接略過以加快登入
+    with _gas_empty_cache_lock:
+        if user_id in _gas_empty_cache:
+            return None
     try:
         url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
         with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -474,6 +485,8 @@ def pull_from_gas(user_id, timeout=8):
             return data
         else:
             logger.info(f"[GAS] No backup for userId={user_id}: {result.get('message')}")
+            with _gas_empty_cache_lock:
+                _gas_empty_cache.add(user_id)
     except Exception as e:
         logger.warning(f"[GAS] Restore failed for userId={user_id}: {e}")
     return None
