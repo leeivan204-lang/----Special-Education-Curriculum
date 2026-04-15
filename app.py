@@ -407,6 +407,22 @@ def editor_status(user_id):
         return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
     return jsonify({'success': True, **_get_editor_info(user_id)})
 
+@app.route('/api/editor/debug', methods=['GET'])
+def editor_debug():
+    """開發/除錯用：回傳目前所有編輯鎖和連線狀態"""
+    return jsonify({
+        'editor_locks': {
+            uid: {'sid': lock['sid'], 'since': lock['since'], 'last_activity': lock['last_activity']}
+            for uid, lock in editor_locks.items()
+        },
+        'user_sockets': {uid: list(sids) for uid, sids in user_sockets.items()},
+        'socket_to_user': dict(socket_to_user),
+        'pending_requests': {
+            uid: [{'sid': r['sid'], 'requested_at': r['requested_at']} for r in reqs]
+            for uid, reqs in pending_edit_requests.items()
+        }
+    })
+
 # --- 簡易速率限制（記憶體內，適用於單機部署） ---
 from collections import defaultdict
 
