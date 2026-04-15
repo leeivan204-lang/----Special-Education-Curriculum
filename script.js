@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SCHEMA_VERSION = 1;   // Schema 版本號（提前宣告供衝突合併使用）
 
     // --- 編輯者鎖狀態 ---
-    let MY_ROLE = 'viewer';          // 'editor' | 'viewer'
+    let MY_ROLE = null;              // null (尚未確認) | 'editor' | 'viewer'
     let CURRENT_EDITOR_SID = null;   // 目前持有編輯權的 sid（null 表示無人）
     let _editorHeartbeatTimer = null;
     let _incomingRequestModal = null;
@@ -376,16 +376,25 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.insertBefore(bar, document.body.firstChild);
         }
         const isEditor = (MY_ROLE === 'editor');
-        const editorInfo = isEditor
-            ? '✏️ 編輯模式（您正在編輯）'
-            : `👁️ 檢視模式（目前編輯者：其他裝置${CURRENT_EDITOR_SID ? ' (' + CURRENT_EDITOR_SID.slice(0, 6) + ')' : ''}）`;
-        bar.style.cssText = `position:relative;width:100%;padding:8px 14px;color:#fff;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:600;font-size:0.95em;z-index:10000;${isEditor
-            ? 'background:linear-gradient(90deg,#059669 0%,#10b981 100%);'
-            : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);'}`;
+        const isPending = (MY_ROLE === null);
+        const editorInfo = isPending
+            ? '⏳ 正在取得編輯權限...'
+            : (isEditor
+                ? '✏️ 編輯模式（您正在編輯）'
+                : `👁️ 檢視模式（目前編輯者：其他裝置${CURRENT_EDITOR_SID ? ' (' + CURRENT_EDITOR_SID.slice(0, 6) + ')' : ''}）`);
+        bar.style.cssText = `position:relative;width:100%;padding:8px 14px;color:#fff;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:600;font-size:0.95em;z-index:10000;${isPending
+            ? 'background:linear-gradient(90deg,#6b7280 0%,#9ca3af 100%);'
+            : (isEditor
+                ? 'background:linear-gradient(90deg,#059669 0%,#10b981 100%);'
+                : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);')}`;
         bar.innerHTML = '';
         const msg = document.createElement('span');
         msg.textContent = editorInfo;
         bar.appendChild(msg);
+        if (isPending) {
+            // 尚未確認角色，不顯示按鈕
+            return;
+        }
         if (isEditor) {
             const btnRelease = document.createElement('button');
             btnRelease.textContent = '釋放編輯權';
