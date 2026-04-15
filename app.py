@@ -260,14 +260,22 @@ def on_editor_acquire(data):
 
     existing = editor_locks.get(user_id)
     if existing and existing['sid'] != sid:
-        # 已有其他編輯者 → 本人成為檢視者
-        emit('editor_acquire_result', {
-            'success': False,
-            'role': 'viewer',
-            'currentEditorSid': existing['sid'],
-            'since': existing['since']
-        })
-        return
+        # 檢查持有者是否仍在線上；若已斷線（幽靈鎖），直接釋放並授予新 sid
+        if existing['sid'] not in socket_to_user:
+            logger.info(f"[EditorLock] Ghost lock detected for {user_id} (sid={existing['sid']} disconnected), releasing")
+            del editor_locks[user_id]
+            # 也清除等待佇列中該幽靈 sid
+            if user_id in pending_edit_requests:
+                pending_edit_requests[user_id] = [r for r in pending_edit_requests[user_id] if r['sid'] in socket_to_user]
+        else:
+            # 真的有其他線上編輯者 → 本人成為檢視者
+            emit('editor_acquire_result', {
+                'success': False,
+                'role': 'viewer',
+                'currentEditorSid': existing['sid'],
+                'since': existing['since']
+            })
+            return
 
     # 取得鎖（或更新自己的 last_activity）
     now = _time.time()
