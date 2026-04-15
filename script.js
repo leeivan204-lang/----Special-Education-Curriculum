@@ -207,6 +207,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let _isSaving = false;      // 防止並行儲存
     let _baseSnapshot = null;   // 上次同步時的完整快照（用於 field-level merge）
     const SCHEMA_VERSION = 1;   // Schema 版本號（提前宣告供衝突合併使用）
+
+    // --- 編輯者鎖狀態 ---
+    let MY_ROLE = 'viewer';          // 'editor' | 'viewer'
+    let CURRENT_EDITOR_SID = null;   // 目前持有編輯權的 sid（null 表示無人）
+    let _editorHeartbeatTimer = null;
+    let _incomingRequestModal = null;
     // 動態偵測 API Base URL，自動適配本地開發、GitHub Pages、及任意部署環境
     const API_BASE = (window.location.protocol === 'file:' || window.location.hostname === '')
         ? 'http://localhost:3000/api'          // 以 file:// 開啟的靜態模式，回退到本地伺服器
@@ -228,6 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to WebSocket server');
         if (CURRENT_USER) {
             socket.emit('join', { userId: CURRENT_USER });
+            // 重新連線時嘗試恢復角色
+            socket.emit('editor_acquire', { userId: CURRENT_USER });
         }
     });
 
@@ -252,6 +260,193 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Presence warning:', data);
         showPresenceToast(data.message);
     });
+
+    // --- 編輯權相關事件 ---
+    socket.on('editor_acquire_result', (data) => {
+        if (data.success) {
+            MY_ROLE = 'editor';
+            CURRENT_EDITOR_SID = socket.id;
+            startEditorHeartbeat();
+            renderRoleBar();
+            showSnackbar('✏️ 您是編輯者，可以修改資料', null, 2500);
+        } else {
+            MY_ROLE = 'viewer';
+            CURRENT_EDITOR_SID = data.currentEditorSid || null;
+            stopEditorHeartbeat();
+            renderRoleBar();
+            showSnackbar('👁️ 已有其他裝置在編輯，您為檢視者', null, 3000);
+        }
+        applyRoleUI();
+    });
+
+    socket.on('editor_changed', (state) => {
+        CURRENT_EDITOR_SID = state.editorSid;
+        // 若編輯者不是我自己，則我必為檢視者
+        if (state.editorSid !== socket.id) {
+            if (MY_ROLE === 'editor') {
+                // 我失去了編輯權
+                MY_ROLE = 'viewer';
+                stopEditorHeartbeat();
+            } else {
+                MY_ROLE = 'viewer';
+            }
+        } else {
+            MY_ROLE = 'editor';
+        }
+        renderRoleBar();
+        applyRoleUI();
+    });
+
+    socket.on('editor_request_incoming', (data) => {
+        // 我是目前編輯者，有人申請編輯權
+        showIncomingRequestModal(data.requesterSid, data.requesterName);
+    });
+
+    socket.on('editor_request_granted', (data) => {
+        MY_ROLE = 'editor';
+        CURRENT_EDITOR_SID = socket.id;
+        startEditorHeartbeat();
+        renderRoleBar();
+        applyRoleUI();
+        showSnackbar('✏️ 已取得編輯權', null, 2500);
+    });
+
+    socket.on('editor_request_denied', () => {
+        showSnackbar('對方拒絕讓出編輯權', null, 3000);
+    });
+
+    socket.on('editor_request_pending', () => {
+        showSnackbar('已送出編輯權申請，等待對方回應...', null, 3000);
+    });
+
+    socket.on('editor_slot_available', () => {
+        showSnackbar('編輯權已釋放，可再次申請', null, 3000);
+    });
+
+    socket.on('editor_kicked', (data) => {
+        MY_ROLE = 'viewer';
+        stopEditorHeartbeat();
+        renderRoleBar();
+        applyRoleUI();
+        alert(data.message || '管理員已接管編輯權');
+    });
+
+    socket.on('editor_takeover_result', (data) => {
+        if (data.success) {
+            MY_ROLE = 'editor';
+            CURRENT_EDITOR_SID = socket.id;
+            startEditorHeartbeat();
+            renderRoleBar();
+            applyRoleUI();
+            showSnackbar('✏️ 已強制接管編輯權', null, 2500);
+        } else {
+            alert('接管失敗：' + (data.message || '未知錯誤'));
+        }
+    });
+
+    function startEditorHeartbeat() {
+        stopEditorHeartbeat();
+        _editorHeartbeatTimer = setInterval(() => {
+            if (MY_ROLE === 'editor' && CURRENT_USER) {
+                socket.emit('editor_heartbeat', { userId: CURRENT_USER });
+            }
+        }, 60000); // 每分鐘
+    }
+    function stopEditorHeartbeat() {
+        if (_editorHeartbeatTimer) {
+            clearInterval(_editorHeartbeatTimer);
+            _editorHeartbeatTimer = null;
+        }
+    }
+
+    function applyRoleUI() {
+        if (MY_ROLE === 'viewer') {
+            document.body.classList.add('viewer-mode');
+        } else {
+            document.body.classList.remove('viewer-mode');
+        }
+    }
+
+    function renderRoleBar() {
+        if (!CURRENT_USER) return;
+        let bar = document.getElementById('role-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'role-bar';
+            document.body.insertBefore(bar, document.body.firstChild);
+        }
+        const isEditor = (MY_ROLE === 'editor');
+        const editorInfo = isEditor
+            ? '✏️ 編輯模式（您正在編輯）'
+            : `👁️ 檢視模式（目前編輯者：其他裝置${CURRENT_EDITOR_SID ? ' (' + CURRENT_EDITOR_SID.slice(0, 6) + ')' : ''}）`;
+        bar.style.cssText = `position:relative;width:100%;padding:8px 14px;color:#fff;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:600;font-size:0.95em;z-index:10000;${isEditor
+            ? 'background:linear-gradient(90deg,#059669 0%,#10b981 100%);'
+            : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);'}`;
+        bar.innerHTML = '';
+        const msg = document.createElement('span');
+        msg.textContent = editorInfo;
+        bar.appendChild(msg);
+        if (isEditor) {
+            const btnRelease = document.createElement('button');
+            btnRelease.textContent = '釋放編輯權';
+            btnRelease.className = 'viewer-allowed';
+            btnRelease.style.cssText = 'background:#fff;color:#065f46;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.88em;';
+            btnRelease.onclick = () => {
+                if (confirm('確定要釋放編輯權？其他裝置將可申請編輯。')) {
+                    socket.emit('editor_release', { userId: CURRENT_USER });
+                }
+            };
+            bar.appendChild(btnRelease);
+        } else {
+            const btnRequest = document.createElement('button');
+            btnRequest.textContent = '申請編輯權';
+            btnRequest.className = 'viewer-allowed';
+            btnRequest.style.cssText = 'background:#fbbf24;color:#1e3a8a;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.88em;';
+            btnRequest.onclick = () => {
+                socket.emit('editor_request', { userId: CURRENT_USER, name: CURRENT_USER });
+            };
+            bar.appendChild(btnRequest);
+
+            const btnAdmin = document.createElement('button');
+            btnAdmin.textContent = '管理員模式';
+            btnAdmin.className = 'viewer-allowed';
+            btnAdmin.style.cssText = 'background:transparent;color:#fff;border:1px solid #fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.82em;';
+            btnAdmin.onclick = () => {
+                const pwd = prompt('請輸入管理員密碼以強制接管編輯權：');
+                if (pwd) {
+                    socket.emit('editor_takeover', { userId: CURRENT_USER, adminPassword: pwd });
+                }
+            };
+            bar.appendChild(btnAdmin);
+        }
+    }
+
+    function showIncomingRequestModal(requesterSid, requesterName) {
+        if (_incomingRequestModal) _incomingRequestModal.remove();
+        const overlay = document.createElement('div');
+        _incomingRequestModal = overlay;
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;justify-content:center;align-items:center;padding:1rem;';
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#fff;border-radius:12px;padding:1.75rem 2rem;max-width:420px;box-shadow:0 6px 30px rgba(0,0,0,0.3);';
+        card.innerHTML = `
+            <h3 style="margin:0 0 0.5rem;color:#1e3a8a;">🔔 有裝置申請編輯權</h3>
+            <p style="color:#475569;margin:0 0 1.25rem;">裝置「${escHtml(requesterName)}」(sid: ${escHtml(requesterSid.slice(0,6))}) 想要取得編輯權，是否讓出？</p>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button id="btn-req-keep" style="padding:7px 16px;border-radius:5px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">保持編輯</button>
+                <button id="btn-req-grant" style="padding:7px 16px;border-radius:5px;border:none;background:#059669;color:#fff;font-weight:bold;cursor:pointer;">讓出編輯權</button>
+            </div>
+        `;
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+        card.querySelector('#btn-req-keep').onclick = () => {
+            socket.emit('editor_yield', { userId: CURRENT_USER, grant: false, targetSid: requesterSid });
+            overlay.remove(); _incomingRequestModal = null;
+        };
+        card.querySelector('#btn-req-grant').onclick = () => {
+            socket.emit('editor_yield', { userId: CURRENT_USER, grant: true, targetSid: requesterSid });
+            overlay.remove(); _incomingRequestModal = null;
+        };
+    }
 
     function showDataUpdatedBar() {
         let bar = document.getElementById('data-updated-bar');
@@ -443,6 +638,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Join WebSocket Room
             socket.emit('join', { userId: userId });
 
+            // 嘗試取得編輯權（若已有人編輯則自動變檢視者）
+            socket.emit('editor_acquire', { userId: userId });
+
             // 2. Load Data
             await loadDataAndSync();
 
@@ -450,6 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loginSection.classList.add('hidden'); // Add helper class if needed, or inline
             loginSection.style.display = 'none';
             mainAppSection.style.display = 'flex';
+            renderRoleBar();
 
             // 4. Force Re-render
             refreshAllViews();
@@ -742,6 +941,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await response.json();
                 setSaveStatus('error');
                 handleConflict(result.serverData);
+                return;
+            }
+
+            // --- 403 檢視者模式：無編輯權 ---
+            if (response.status === 403) {
+                const result = await response.json().catch(() => ({}));
+                setSaveStatus('error');
+                showSnackbar(result.message || '您目前是檢視者，無法儲存', null, 4000);
+                // 更新本地角色狀態
+                MY_ROLE = 'viewer';
+                CURRENT_EDITOR_SID = result.currentEditorSid || null;
+                stopEditorHeartbeat();
+                renderRoleBar();
+                applyRoleUI();
                 return;
             }
 

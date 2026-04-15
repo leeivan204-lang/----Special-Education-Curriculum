@@ -3296,6 +3296,41 @@ body.print-general-mode .master-schedule-table.print-only .day-cell-grid.layout-
     margin-bottom: 6px;
 }
 
+/* ===== 檢視者模式（唯讀）===== */
+/* 主內容區所有元素預設禁用互動 */
+body.viewer-mode .main-content,
+body.viewer-mode .main-content * {
+    pointer-events: none !important;
+    -webkit-user-select: none;
+    user-select: none;
+}
+/* 允許導覽（切換頁籤）與明確標記為可用的元素 */
+body.viewer-mode .main-content .nav-tabs,
+body.viewer-mode .main-content .nav-tabs *,
+body.viewer-mode .main-content nav,
+body.viewer-mode .main-content nav *,
+body.viewer-mode .main-content .tab-btn,
+body.viewer-mode .main-content .viewer-allowed,
+body.viewer-mode .main-content .viewer-allowed * {
+    pointer-events: auto !important;
+}
+/* 視覺提示：整個主內容半透明表示唯讀 */
+body.viewer-mode .main-content {
+    opacity: 0.85;
+    cursor: not-allowed;
+}
+/* 角色列永遠可點 */
+body.viewer-mode #role-bar,
+body.viewer-mode #role-bar * {
+    pointer-events: auto !important;
+    opacity: 1 !important;
+}
+/* Sidebar 的登出、備份等功能保留 */
+body.viewer-mode #btn-logout,
+body.viewer-mode #btn-cloud-backup {
+    pointer-events: auto !important;
+}
+
 /* ===== 多裝置衝突解決 UI ===== */
 .conflict-modal-overlay {
     position: fixed;
