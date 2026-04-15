@@ -1,8 +1,14 @@
 import os as _os
-# 生產環境（Render 等）需在最頂端 monkey patch，讓 eventlet 能接管 socket I/O
-if _os.environ.get('RENDER') or _os.environ.get('EVENTLET_MONKEY_PATCH') == '1':
-    import eventlet
-    eventlet.monkey_patch()
+# 生產環境（Render 等）需在最頂端 monkey patch，讓 gevent/eventlet 能接管 socket I/O
+# 預設使用 gevent（對新版 Python 支援較好），設 ASYNC_MODE=eventlet 可切換
+_ASYNC_MODE = _os.environ.get('ASYNC_MODE', 'gevent').lower()
+if _os.environ.get('RENDER') or _os.environ.get('GEVENT_MONKEY_PATCH') == '1' or _os.environ.get('EVENTLET_MONKEY_PATCH') == '1':
+    if _ASYNC_MODE == 'eventlet':
+        import eventlet
+        eventlet.monkey_patch()
+    else:
+        from gevent import monkey
+        monkey.patch_all()
 
 import os
 import re
@@ -60,7 +66,7 @@ logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 限制請求大小 5MB
 CORS(app, origins=ALLOWED_ORIGINS)
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, async_mode=_ASYNC_MODE if _os.environ.get('RENDER') else None)
 
 # --- 安全性 HTTP 標頭 ---
 @app.after_request
