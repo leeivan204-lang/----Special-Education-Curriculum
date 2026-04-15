@@ -258,14 +258,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'data-updated-bar';
-            bar.style.cssText = 'position:relative;width:100%;background:#ff9800;color:#fff;padding:10px 16px;box-shadow:0 2px 5px rgba(0,0,0,0.2);z-index:10001;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:bold;';
+            bar.style.cssText = 'position:relative;width:100%;background:linear-gradient(90deg,#1e3a8a 0%,#4338ca 100%);color:#fff;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.25);z-index:10001;display:flex;justify-content:center;align-items:center;gap:14px;box-sizing:border-box;font-weight:bold;font-size:1.02em;letter-spacing:0.02em;border-bottom:2px solid #fbbf24;';
 
             const msg = document.createElement('span');
-            msg.textContent = '⚠️ 其他裝置已更新資料';
+            msg.innerHTML = '<span style="display:inline-block;animation:dataBarPulse 1.2s ease-in-out infinite;margin-right:4px;">⚠️</span> 其他裝置已更新資料';
+            // 注入 keyframes（只注入一次）
+            if (!document.getElementById('data-updated-bar-kf')) {
+                const style = document.createElement('style');
+                style.id = 'data-updated-bar-kf';
+                style.textContent = '@keyframes dataBarPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.25);opacity:0.75;}}';
+                document.head.appendChild(style);
+            }
 
             const btnReload = document.createElement('button');
             btnReload.textContent = '🔄 重新載入';
-            btnReload.style.cssText = 'background:#fff;color:#e65100;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.9em;';
+            btnReload.style.cssText = 'background:#fbbf24;color:#1e3a8a;border:none;padding:7px 16px;border-radius:5px;cursor:pointer;font-weight:bold;font-size:0.92em;box-shadow:0 1px 3px rgba(0,0,0,0.2);';
             btnReload.onclick = async () => {
                 bar.style.display = 'none';
                 _isDataStale = false;
