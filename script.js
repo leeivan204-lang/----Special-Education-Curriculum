@@ -725,81 +725,38 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             console.log('Starting data sync process...');
 
-            // 1. Fetch Server Data (with cache busting)
-            const serverPromise = fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${new Date().getTime()}`)
-                .then(r => r.json())
-                .catch(err => ({ success: false, error: err }));
+            // 伺服器端已負責所有 GAS 同步（存檔 push、冷啟動 pull）
+            // 前端只需信任伺服器，無需再直接查 GAS，避免每次載入等待 2-8s
+            const serverResult = await fetch(
+                `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
+            ).then(r => r.json()).catch(err => ({ success: false, error: err }));
 
-            // 2. Fetch Cloud Data (if GAS URL exists)
-            let cloudPromise = Promise.resolve(null);
-            if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL) {
-                console.log('Fetching Google Sheet data...');
-                const gasController = new AbortController();
-                const gasTimeout = setTimeout(() => gasController.abort(), 8000); // 8s timeout
-                // 附加 idToken（若有效）以通過 GAS 端 OAuth 驗證
-                const gasTokenParam = isGoogleTokenValid() ? `&idToken=${encodeURIComponent(googleIdToken)}` : '';
-                cloudPromise = fetch(`${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}${gasTokenParam}`, { signal: gasController.signal })
-                    .then(r => r.json())
-                    .catch(err => {
-                        console.warn('Google Sheets fetch failed:', err.name === 'AbortError' ? 'timeout' : err);
-                        return null;
-                    })
-                    .finally(() => clearTimeout(gasTimeout));
-            }
-
-            // Wait for both
-            const [serverResult, cloudResult] = await Promise.all([serverPromise, cloudPromise]);
-
-            // --- A. Determine Best Remote Data (Server vs Cloud) ---
+            // --- A. 使用伺服器資料 ---
             let bestRemoteData = null;
-            let serverHasData = serverResult && serverResult.success && serverResult.data;
-            let cloudHasData = cloudResult && (cloudResult.courses || cloudResult.data); // GAS usually returns data directly or inside .data
+            const serverHasData = serverResult && serverResult.success && serverResult.data;
 
-            // Normalize cloud data structure
-            let normalizedCloudData = null;
-            if (cloudHasData) {
-                normalizedCloudData = cloudResult.data || cloudResult;
-            }
-
-            if (serverHasData && normalizedCloudData) {
-                // Both exist, compare timestamps
-                const serverTime = parseTimestamp(serverResult.data.timestamp);
-                const cloudTime = parseTimestamp(normalizedCloudData.timestamp);
-
-                // console.log('Comparing timestamps:', { serverTime, cloudTime });
-
-                if (cloudTime > serverTime) {
-                    // Cloud is newer
-                    const useCloud = confirm(
-                        `發現 Google Cloud 上有較新的備份！\n\n` +
-                        `雲端時間：${normalizedCloudData.timestamp}\n` +
-                        `伺服器時間：${serverResult.data.timestamp || '無'}\n\n` +
-                        `是否要匯入雲端資料？ (建議選擇「確定」)`
-                    );
-                    if (useCloud) {
-                        bestRemoteData = normalizedCloudData;
-                        // Sync Cloud -> Server immediately
-                        console.log('Syncing Cloud data to Server...');
-                        await saveToCustomServer(bestRemoteData);
-                    } else {
-                        bestRemoteData = serverResult.data;
-                    }
-                } else {
-                    // Server is newer or equal
-                    bestRemoteData = serverResult.data;
-                }
-            } else if (serverHasData) {
+            if (serverHasData) {
                 bestRemoteData = serverResult.data;
-            } else if (normalizedCloudData) {
-                console.log('Only cloud data found.');
-                const useCloud = confirm(
-                    `伺服器無資料，但發現 Google Cloud 上有備份！\n\n` +
-                    `雲端時間：${normalizedCloudData.timestamp}\n` +
-                    `是否要匯入雲端資料？`
-                );
-                if (useCloud) {
-                    bestRemoteData = normalizedCloudData;
-                    await saveToCustomServer(bestRemoteData);
+            } else {
+                // 伺服器無資料（極少見：首次登入且 GAS 無備份）
+                // 嘗試直接從 GAS 拉取（最後備援，允許稍慢）
+                if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL) {
+                    console.log('[loadDataAndSync] Server empty, trying GAS fallback...');
+                    try {
+                        const gasController = new AbortController();
+                        const gasTimeout = setTimeout(() => gasController.abort(), 5000);
+                        const cloudResult = await fetch(
+                            `${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`,
+                            { signal: gasController.signal }
+                        ).then(r => r.json()).catch(() => null).finally(() => clearTimeout(gasTimeout));
+                        if (cloudResult && (cloudResult.courses || cloudResult.data)) {
+                            bestRemoteData = cloudResult.data || cloudResult;
+                            // 回寫到伺服器
+                            await saveToCustomServer(bestRemoteData);
+                        }
+                    } catch (e) {
+                        console.warn('[loadDataAndSync] GAS fallback failed:', e);
+                    }
                 }
             }
 
