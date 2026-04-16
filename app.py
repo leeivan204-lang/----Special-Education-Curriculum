@@ -487,16 +487,19 @@ def push_to_gas_async(user_id, data):
     t = threading.Thread(target=_push, daemon=True, name=f"gas-push-{user_id}")
     t.start()
 
-def pull_from_gas(user_id, timeout=4):
-    """從 GAS 取得該 userId 的最新備份資料。找不到或失敗時回傳 None。"""
+def pull_from_gas(user_id, timeout=12):
+    """從 GAS 取得該 userId 的最新備份資料。找不到或失敗時回傳 None。
+    timeout 設 12 秒因為 GAS 首次執行（冷啟動）需要 5-15 秒。
+    """
     if not GAS_ENABLED:
         return None
-    # 若此 user_id 先前已確認無備份，直接略過以加快登入
+    # 若此 user_id 先前已確認 GAS 「明確回傳無資料」，直接略過
     with _gas_empty_cache_lock:
         if user_id in _gas_empty_cache:
             return None
     try:
         url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
+        logger.info(f"[GAS] Pulling data for userId={user_id} (timeout={timeout}s)...")
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             body = resp.read().decode('utf-8')
         result = json.loads(body)
@@ -508,11 +511,13 @@ def pull_from_gas(user_id, timeout=4):
             logger.info(f"[GAS] Restore found for userId={user_id}")
             return data
         else:
+            # GAS 明確回覆「此 userId 沒有備份」→ 才放入快取
             logger.info(f"[GAS] No backup for userId={user_id}: {result.get('message')}")
             with _gas_empty_cache_lock:
                 _gas_empty_cache.add(user_id)
     except Exception as e:
-        logger.warning(f"[GAS] Restore failed for userId={user_id}: {e}")
+        # timeout / 網路錯誤 → 不放入快取（下次仍會重試）
+        logger.warning(f"[GAS] Restore failed for userId={user_id}: {e} (will retry next time)")
     return None
 
 # API: Login
