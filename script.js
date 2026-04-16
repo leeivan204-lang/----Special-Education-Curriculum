@@ -281,17 +281,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('editor_changed', (state) => {
         CURRENT_EDITOR_SID = state.editorSid;
-        // 若編輯者不是我自己，則我必為檢視者
-        if (state.editorSid !== socket.id) {
+
+        if (!state.hasEditor) {
+            // 目前無人持有編輯權
             if (MY_ROLE === 'editor') {
-                // 我失去了編輯權
-                MY_ROLE = 'viewer';
-                stopEditorHeartbeat();
+                // 我本來是編輯者但鎖被清了（idle timeout 等）→ 重新 acquire
+                socket.emit('editor_acquire', { userId: CURRENT_USER });
             } else {
-                MY_ROLE = 'viewer';
+                // 沒有編輯者 → 嘗試自動搶位
+                socket.emit('editor_acquire', { userId: CURRENT_USER });
             }
-        } else {
+            return; // 等 editor_acquire_result 再更新 UI
+        }
+
+        if (state.editorSid === socket.id) {
             MY_ROLE = 'editor';
+        } else {
+            if (MY_ROLE === 'editor') {
+                // 我失去了編輯權（被搶或被接管）
+                stopEditorHeartbeat();
+            }
+            MY_ROLE = 'viewer';
         }
         renderRoleBar();
         applyRoleUI();
@@ -649,6 +659,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 嘗試取得編輯權（若已有人編輯則自動變檢視者）
             socket.emit('editor_acquire', { userId: userId });
+
+            // 超時保護：若 5 秒後仍未收到 editor_acquire_result，重試
+            setTimeout(() => {
+                if (MY_ROLE === null && CURRENT_USER) {
+                    console.warn('[EditorLock] Timeout waiting for editor_acquire_result, retrying...');
+                    socket.emit('editor_acquire', { userId: CURRENT_USER });
+                    // 再等 3 秒，若仍無回應則預設為 editor（單人使用時不阻塞）
+                    setTimeout(() => {
+                        if (MY_ROLE === null && CURRENT_USER) {
+                            console.warn('[EditorLock] Still no response, defaulting to editor');
+                            MY_ROLE = 'editor';
+                            CURRENT_EDITOR_SID = socket.id;
+                            startEditorHeartbeat();
+                            renderRoleBar();
+                            applyRoleUI();
+                        }
+                    }, 3000);
+                }
+            }, 5000);
 
             // 2. Load Data
             await loadDataAndSync();
