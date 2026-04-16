@@ -431,6 +431,39 @@ def editor_debug():
         }
     })
 
+@app.route('/api/editor/acquire', methods=['POST'])
+def editor_acquire_http():
+    """HTTP-based editor acquire，用於 WebSocket 不穩時的備援。"""
+    data = request.json or {}
+    user_id = data.get('userId')
+    caller_sid = data.get('socketId')
+
+    if not user_id or not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid userId'}), 400
+
+    existing = editor_locks.get(user_id)
+
+    # 檢查幽靈鎖
+    if existing and existing['sid'] and existing['sid'] not in socket_to_user:
+        logger.info(f"[EditorLock/HTTP] Ghost lock for {user_id}, releasing")
+        del editor_locks[user_id]
+        existing = None
+
+    if existing and caller_sid and existing['sid'] != caller_sid:
+        return jsonify({
+            'success': False,
+            'role': 'viewer',
+            'currentEditorSid': existing['sid'],
+            'since': existing['since']
+        })
+
+    # 授予編輯權
+    now = _time.time()
+    sid_to_use = caller_sid or f"http-{user_id}-{now}"
+    editor_locks[user_id] = {'sid': sid_to_use, 'since': now, 'last_activity': now}
+    logger.info(f"[EditorLock/HTTP] {sid_to_use} acquired editor for {user_id}")
+    return jsonify({'success': True, 'role': 'editor', 'since': now})
+
 # --- 簡易速率限制（記憶體內，適用於單機部署） ---
 from collections import defaultdict
 

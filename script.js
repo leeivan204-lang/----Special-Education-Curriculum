@@ -354,6 +354,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    /**
+     * HTTP-based editor acquire：不依賴 WebSocket，透過 HTTP 確認角色。
+     * 若 WebSocket 也有回應，editor_acquire_result 會覆蓋此結果（取較新的）。
+     */
+    async function acquireEditorViaHttp(userId) {
+        try {
+            const resp = await fetch(`${API_BASE}/api/editor/acquire`, {
+                method: 'POST',
+                headers: API_HEADERS,
+                body: JSON.stringify({ userId, socketId: socket.id || null })
+            });
+            const result = await resp.json();
+            if (result.success) {
+                if (MY_ROLE !== 'editor') {
+                    MY_ROLE = 'editor';
+                    CURRENT_EDITOR_SID = socket.id;
+                    startEditorHeartbeat();
+                    renderRoleBar();
+                    applyRoleUI();
+                }
+            } else {
+                if (MY_ROLE !== 'editor') {
+                    MY_ROLE = 'viewer';
+                    CURRENT_EDITOR_SID = result.currentEditorSid || null;
+                    renderRoleBar();
+                    applyRoleUI();
+                }
+            }
+        } catch (e) {
+            console.warn('[EditorLock] HTTP acquire failed, defaulting to editor:', e);
+            // 網路錯誤 → 預設為 editor（單人使用不被阻塞）
+            if (MY_ROLE === null) {
+                MY_ROLE = 'editor';
+                CURRENT_EDITOR_SID = socket.id;
+                startEditorHeartbeat();
+                renderRoleBar();
+                applyRoleUI();
+            }
+        }
+    }
+
     function startEditorHeartbeat() {
         stopEditorHeartbeat();
         _editorHeartbeatTimer = setInterval(() => {
@@ -657,27 +698,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Join WebSocket Room
             socket.emit('join', { userId: userId });
 
-            // 嘗試取得編輯權（若已有人編輯則自動變檢視者）
+            // 嘗試取得編輯權（HTTP 為主，WebSocket 為輔）
             socket.emit('editor_acquire', { userId: userId });
-
-            // 超時保護：若 5 秒後仍未收到 editor_acquire_result，重試
-            setTimeout(() => {
-                if (MY_ROLE === null && CURRENT_USER) {
-                    console.warn('[EditorLock] Timeout waiting for editor_acquire_result, retrying...');
-                    socket.emit('editor_acquire', { userId: CURRENT_USER });
-                    // 再等 3 秒，若仍無回應則預設為 editor（單人使用時不阻塞）
-                    setTimeout(() => {
-                        if (MY_ROLE === null && CURRENT_USER) {
-                            console.warn('[EditorLock] Still no response, defaulting to editor');
-                            MY_ROLE = 'editor';
-                            CURRENT_EDITOR_SID = socket.id;
-                            startEditorHeartbeat();
-                            renderRoleBar();
-                            applyRoleUI();
-                        }
-                    }, 3000);
-                }
-            }, 5000);
+            await acquireEditorViaHttp(userId);
 
             // 2. Load Data
             await loadDataAndSync();
