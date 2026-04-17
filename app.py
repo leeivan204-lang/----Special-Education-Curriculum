@@ -533,7 +533,9 @@ def pull_from_gas(user_id, timeout=12):
     try:
         url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
         logger.info(f"[GAS] Pulling data for userId={user_id} (timeout={timeout}s)...")
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        # GAS 會先 302 redirect → 需手動追蹤（最多 5 次）
+        req = urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/GAS-pull'})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode('utf-8')
         result = json.loads(body)
         if result.get('status') == 'success' and result.get('data'):
@@ -595,13 +597,16 @@ def migrate_data(data):
 
     return data
 
-# 追蹤正在進行中的 GAS 還原，避免重複拉取
-_gas_restore_in_progress = set()
+# 追蹤 GAS 還原狀態：in_progress=正在拉取, confirmed_empty=GAS 確認無資料
+_gas_restore_in_progress = set()   # 正在背景拉取中
+_gas_restore_confirmed_empty = set()  # GAS 已明確回覆此 userId 無備份
 _gas_restore_lock = threading.Lock()
 
 def _start_gas_restore_bg(user_id, file_path):
     """背景拉 GAS 還原資料，拉到後寫入本機檔並通知前端。"""
     with _gas_restore_lock:
+        if user_id in _gas_restore_confirmed_empty:
+            return  # 已確認無備份，不重複請求
         if user_id in _gas_restore_in_progress:
             return  # 已在拉取中
         _gas_restore_in_progress.add(user_id)
@@ -622,9 +627,17 @@ def _start_gas_restore_bg(user_id, file_path):
                 try:
                     socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
                 except Exception:
-                    pass  # WebSocket 可能不可用
+                    pass
             else:
-                logger.info(f"[GAS/BG] No backup found for {user_id}")
+                # pull_from_gas 回 None：可能是 GAS 確認無資料，或是 timeout
+                # _gas_empty_cache 有值代表 GAS 明確回覆無資料
+                with _gas_empty_cache_lock:
+                    if user_id in _gas_empty_cache:
+                        with _gas_restore_lock:
+                            _gas_restore_confirmed_empty.add(user_id)
+                        logger.info(f"[GAS/BG] No backup confirmed for {user_id}")
+                    else:
+                        logger.info(f"[GAS/BG] Pull failed/timeout for {user_id}, will retry")
         finally:
             with _gas_restore_lock:
                 _gas_restore_in_progress.discard(user_id)
@@ -645,7 +658,13 @@ def get_data(user_id):
             data = migrate_data(data)
             return jsonify({'success': True, 'data': data})
         else:
-            # 本機無資料 → 背景拉 GAS，先回傳 null 讓前端秒進
+            # 本機無資料 → 確認狀態
+            with _gas_restore_lock:
+                confirmed_empty = user_id in _gas_restore_confirmed_empty
+            if confirmed_empty:
+                # GAS 已確認此 userId 無備份，直接告知前端
+                return jsonify({'success': True, 'data': None, 'gasRestoreInProgress': False})
+            # 背景拉 GAS，先回傳 null 讓前端秒進
             _start_gas_restore_bg(user_id, file_path)
             return jsonify({'success': True, 'data': None, 'gasRestoreInProgress': True})
     except Exception as e:

@@ -791,15 +791,17 @@ document.addEventListener('DOMContentLoaded', () => {
             ).then(r => r.json()).catch(err => ({ success: false, error: err }));
 
             let bestRemoteData = null;
+            let _gasRestoreWasInProgress = false;
             const serverHasData = serverResult && serverResult.success && serverResult.data;
 
             if (serverHasData) {
                 bestRemoteData = serverResult.data;
             } else if (serverResult && serverResult.gasRestoreInProgress) {
-                // 伺服器正在背景從 GAS 還原，輪詢等待（最多 20 秒）
+                // 伺服器正在背景從 GAS 還原，輪詢等待（最多 30 秒）
+                _gasRestoreWasInProgress = true;
                 console.log('[loadDataAndSync] GAS restore in progress, polling...');
-                showSnackbar('🔄 正在從 Google Sheet 還原備份資料...', null, 15000);
-                for (let i = 0; i < 10; i++) {
+                showSnackbar('🔄 正在從 Google Sheet 還原備份資料，請稍候...', null, 25000);
+                for (let i = 0; i < 15; i++) {
                     await new Promise(r => setTimeout(r, 2000)); // 每 2 秒查一次
                     const retry = await fetch(
                         `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
@@ -809,83 +811,33 @@ document.addEventListener('DOMContentLoaded', () => {
                         showSnackbar('✅ 備份資料已還原', null, 2000);
                         break;
                     }
+                    // 若 GAS 確認無資料，提早結束輪詢
+                    if (retry && retry.success && !retry.gasRestoreInProgress && !retry.data) {
+                        console.log('[loadDataAndSync] GAS confirmed no backup, stopping poll');
+                        _gasRestoreWasInProgress = false;
+                        break;
+                    }
                 }
-                if (!bestRemoteData) {
-                    showSnackbar('⚠️ 備份還原超時，您可稍後重新整理頁面', null, 5000);
+                if (!bestRemoteData && _gasRestoreWasInProgress) {
+                    showSnackbar('⚠️ 備份還原超時，稍後可重新整理頁面', null, 5000);
                 }
             }
 
-            // --- B. Compare Remote vs Local ---
-
+            // --- B. 使用遠端資料 ---
             if (bestRemoteData) {
-                // We have a candidate from remote (Server or Cloud)
-                const localTimestamp = store.getRaw('lastSavedTimestamp');
-
-                // If we have valid local data
-                if (courses.length > 0) {
-                    const remoteTime = parseTimestamp(bestRemoteData.timestamp);
-                    const localTime = parseTimestamp(localTimestamp);
-
-                    if (localTime > remoteTime) {
-                        // Local is newer! Conflict!
-                        const useLocal = confirm(
-                            `警告：偵測到本機資料比伺服器資料還要新！\n\n` +
-                            `本機時間：${localTimestamp}\n` +
-                            `遠端時間：${bestRemoteData.timestamp || '未知'}\n\n` +
-                            `請問要使用哪一份資料？\n` +
-                            `[確定] 保留本機資料 (並上傳覆蓋伺服器)\n` +
-                            `[取消] 使用伺服器資料 (本機未儲存的修改將遺失)`
-                        );
-
-                        if (useLocal) {
-                            console.log('User chose Local. Uploading to server...');
-                            await saveAllDataToServer(true); // force: 使用者明確選擇覆蓋伺服器
-                            return; // Done, kept local
-                        } else {
-                            console.log('User chose Remote. Overwriting local...');
-                            importDataToMemory(bestRemoteData);
-                            LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
-                            _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
-                            _isDataStale = false;
-                            return;
-                        }
-                    }
-                }
-
-                // Normal case: Remote is newer or local is empty/old -> Trust Remote
                 console.log('Loading remote data...');
                 importDataToMemory(bestRemoteData);
-                // Update our "base" timestamp to match what we just loaded
                 LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
                 _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
                 _isDataStale = false;
+            } else if (!_gasRestoreWasInProgress) {
+                // --- C. 確認無遠端資料（GAS 也確認無備份）→ 全新帳號 ---
+                // 注意：GAS restore 超時時不走此路徑，避免空資料覆蓋 GAS 備份
+                console.log('Confirmed new user, no remote data.');
+                // 不自動儲存空資料，讓使用者開始輸入後再存
             } else {
-                // --- C. No Remote Data (New User) ---
-                console.log('No server or cloud data found.');
-
-                if (courses.length > 0 || students.length > 0) {
-                    // Local data found via leftover (Spe for u default or previous user)
-                    const userWantsToImport = confirm(
-                        `系統偵測到此裝置上有尚未清除的暫存資料。\n\n` +
-                        `ID "${CURRENT_USER}" 是全新的帳號 (伺服器與雲端皆無資料)。\n\n` +
-                        `請問您想要將目前的暫存資料匯入到這個新帳號嗎？\n` +
-                        `[確定] 匯入目前的資料\n` +
-                        `[取消] 建立全新的空白課表`
-                    );
-
-                    if (userWantsToImport) {
-                        console.log('User chose to import local data. Migrating to server...');
-                        await saveAllDataToServer(true); // force: 初次建立帳號
-                    } else {
-                        console.log('User chose fresh start. Resetting state...');
-                        resetState();
-                        await saveAllDataToServer(true); // force: 初次建立帳號
-                        refreshAllViews();
-                    }
-                } else {
-                    console.log('No local data. Starting fresh.');
-                    await saveAllDataToServer(true); // force: 初次建立帳號
-                }
+                // GAS restore 超時，不確定是否有備份 → 保持空白，不寫入任何資料
+                console.log('[loadDataAndSync] GAS restore timed out, keeping empty state (NOT saving)');
             }
 
         } catch (err) {
