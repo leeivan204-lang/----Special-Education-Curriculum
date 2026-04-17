@@ -595,6 +595,42 @@ def migrate_data(data):
 
     return data
 
+# 追蹤正在進行中的 GAS 還原，避免重複拉取
+_gas_restore_in_progress = set()
+_gas_restore_lock = threading.Lock()
+
+def _start_gas_restore_bg(user_id, file_path):
+    """背景拉 GAS 還原資料，拉到後寫入本機檔並通知前端。"""
+    with _gas_restore_lock:
+        if user_id in _gas_restore_in_progress:
+            return  # 已在拉取中
+        _gas_restore_in_progress.add(user_id)
+
+    def _restore():
+        try:
+            restored = pull_from_gas(user_id, timeout=15)
+            if restored:
+                try:
+                    tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
+                    with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+                        json.dump(restored, f, ensure_ascii=False, indent=2)
+                    os.replace(tmp_path, file_path)
+                    logger.info(f"[GAS/BG] Restored {user_id} to local file")
+                except Exception as e:
+                    logger.warning(f"[GAS/BG] Failed to write restored data: {e}")
+                # 通知前端資料已就緒（透過 WebSocket）
+                try:
+                    socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
+                except Exception:
+                    pass  # WebSocket 可能不可用
+            else:
+                logger.info(f"[GAS/BG] No backup found for {user_id}")
+        finally:
+            with _gas_restore_lock:
+                _gas_restore_in_progress.discard(user_id)
+
+    threading.Thread(target=_restore, daemon=True, name=f"gas-restore-{user_id}").start()
+
 # API: Get Data
 @app.route('/api/data/<user_id>', methods=['GET'])
 def get_data(user_id):
@@ -609,21 +645,9 @@ def get_data(user_id):
             data = migrate_data(data)
             return jsonify({'success': True, 'data': data})
         else:
-            # 本機無資料 → 嘗試從 GAS 還原（Render 冷啟動或首次登入時自動回填）
-            restored = pull_from_gas(user_id)
-            if restored:
-                try:
-                    # 原子寫入還原的資料，之後存取就用本機檔
-                    tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
-                    with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
-                        json.dump(restored, f, ensure_ascii=False, indent=2)
-                    os.replace(tmp_path, file_path)
-                    logger.info(f"Restored {user_id} from GAS backup to local")
-                except Exception as e:
-                    logger.warning(f"Failed to write restored data locally: {e}")
-                restored = migrate_data(restored)
-                return jsonify({'success': True, 'data': restored, 'restoredFromGas': True})
-            return jsonify({'success': True, 'data': None})
+            # 本機無資料 → 背景拉 GAS，先回傳 null 讓前端秒進
+            _start_gas_restore_bg(user_id, file_path)
+            return jsonify({'success': True, 'data': None, 'gasRestoreInProgress': True})
     except Exception as e:
         logger.error(f"Error reading data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500

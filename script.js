@@ -261,6 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
         showPresenceToast(data.message);
     });
 
+    // GAS 背景還原完成通知 → 自動重載資料
+    socket.on('gas_restore_ready', async (data) => {
+        console.log('[GAS] Background restore ready:', data);
+        showSnackbar('✅ 備份資料已從 Google Sheet 還原，正在載入...', null, 2000);
+        await loadDataAndSync();
+        refreshAllViews();
+    });
+
     // --- 編輯權相關事件 ---
     socket.on('editor_acquire_result', (data) => {
         if (data.success) {
@@ -360,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function acquireEditorViaHttp(userId) {
         try {
-            const resp = await fetch(`${API_BASE}/api/editor/acquire`, {
+            const resp = await fetch(`${API_BASE}/editor/acquire`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify({ userId, socketId: socket.id || null })
@@ -777,38 +785,33 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             console.log('Starting data sync process...');
 
-            // 伺服器端已負責所有 GAS 同步（存檔 push、冷啟動 pull）
-            // 前端只需信任伺服器，無需再直接查 GAS，避免每次載入等待 2-8s
+            // 從伺服器取得資料（伺服器負責 GAS 同步）
             const serverResult = await fetch(
                 `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
             ).then(r => r.json()).catch(err => ({ success: false, error: err }));
 
-            // --- A. 使用伺服器資料 ---
             let bestRemoteData = null;
             const serverHasData = serverResult && serverResult.success && serverResult.data;
 
             if (serverHasData) {
                 bestRemoteData = serverResult.data;
-            } else {
-                // 伺服器無資料（極少見：首次登入且 GAS 無備份）
-                // 嘗試直接從 GAS 拉取（最後備援，允許稍慢）
-                if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL) {
-                    console.log('[loadDataAndSync] Server empty, trying GAS fallback...');
-                    try {
-                        const gasController = new AbortController();
-                        const gasTimeout = setTimeout(() => gasController.abort(), 5000);
-                        const cloudResult = await fetch(
-                            `${GAS_API_URL}?userId=${encodeURIComponent(CURRENT_USER)}`,
-                            { signal: gasController.signal }
-                        ).then(r => r.json()).catch(() => null).finally(() => clearTimeout(gasTimeout));
-                        if (cloudResult && (cloudResult.courses || cloudResult.data)) {
-                            bestRemoteData = cloudResult.data || cloudResult;
-                            // 回寫到伺服器
-                            await saveToCustomServer(bestRemoteData);
-                        }
-                    } catch (e) {
-                        console.warn('[loadDataAndSync] GAS fallback failed:', e);
+            } else if (serverResult && serverResult.gasRestoreInProgress) {
+                // 伺服器正在背景從 GAS 還原，輪詢等待（最多 20 秒）
+                console.log('[loadDataAndSync] GAS restore in progress, polling...');
+                showSnackbar('🔄 正在從 Google Sheet 還原備份資料...', null, 15000);
+                for (let i = 0; i < 10; i++) {
+                    await new Promise(r => setTimeout(r, 2000)); // 每 2 秒查一次
+                    const retry = await fetch(
+                        `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
+                    ).then(r => r.json()).catch(() => null);
+                    if (retry && retry.success && retry.data) {
+                        bestRemoteData = retry.data;
+                        showSnackbar('✅ 備份資料已還原', null, 2000);
+                        break;
                     }
+                }
+                if (!bestRemoteData) {
+                    showSnackbar('⚠️ 備份還原超時，您可稍後重新整理頁面', null, 5000);
                 }
             }
 
