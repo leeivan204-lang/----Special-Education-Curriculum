@@ -578,11 +578,18 @@ def login():
 CURRENT_SCHEMA_VERSION = 1
 
 # 允許的 user_id 字元：英數字、中文、底線、連字號、點（最長 64 字元）
-_VALID_USER_ID_RE = re.compile(r'^[\w\u4e00-\u9fff.\-]{1,64}$')
+# 允許：英數字、中文、底線、連字號、點、空格（最長 64 字元）
+# 禁止：/ \ .. 等路徑穿越字元
+_VALID_USER_ID_RE = re.compile(r'^[\w\u4e00-\u9fff.\- ]{1,64}$')
 
 def is_valid_user_id(user_id: str) -> bool:
-    """防止路徑穿越攻擊：確保 user_id 只含安全字元。"""
-    return bool(user_id and _VALID_USER_ID_RE.match(user_id))
+    """防止路徑穿越攻擊：確保 user_id 只含安全字元（含空格）。"""
+    if not user_id:
+        return False
+    # 額外防護：禁止含 .. / \ 的路徑穿越嘗試
+    if '..' in user_id or '/' in user_id or '\\' in user_id:
+        return False
+    return bool(_VALID_USER_ID_RE.match(user_id))
 
 def migrate_data(data):
     """將舊版 JSON 結構升級至最新版本，保持向後相容。"""
@@ -649,7 +656,7 @@ def _start_gas_restore_bg(user_id, file_path):
 def get_data(user_id):
     if not is_valid_user_id(user_id):
         return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
-    file_path = os.path.join(DATA_DIR, f"{user_id}.json")
+    file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
 
     try:
         if os.path.exists(file_path):
@@ -714,7 +721,7 @@ def save_data(user_id):
         client_timestamp = None
         force_save = True # Assume force for legacy calls to avoid breaking changes immediately
 
-    file_path = os.path.join(DATA_DIR, f"{user_id}.json")
+    file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
     
     try:
         # Check for conflicts if not forcing
