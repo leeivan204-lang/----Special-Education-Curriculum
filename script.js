@@ -205,6 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let PENDING_SAVE_TIMESTAMP = null; // Track our own pending save to ignore self-notifications
     let _isDataStale = false;   // true = 其他裝置已儲存但使用者選擇「忽略」
     let _isSaving = false;      // 防止並行儲存
+    let _pendingSave = false;   // 儲存進行中有新儲存需求時，待完成後補執行
+    let _pendingSaveForce = false; // 待補執行的儲存是否為 force
     let _baseSnapshot = null;   // 上次同步時的完整快照（用於 field-level merge）
     const SCHEMA_VERSION = 1;   // Schema 版本號（提前宣告供衝突合併使用）
 
@@ -796,6 +798,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (serverHasData) {
                 bestRemoteData = serverResult.data;
+                // 若本機上次成功儲存的 timestamp 比伺服器更新，表示有儲存未同步至伺服器
+                // （例如：儲存進行中被 _isSaving guard 跳過、或儲存請求失敗）
+                // 此時以本機 localStorage 資料為主，並補推一次到伺服器
+                const lastSyncedTs = parseInt(store.getRaw('lastSyncedTimestamp') || '0');
+                const serverTs = parseInt(bestRemoteData.timestamp || '0');
+                if (lastSyncedTs > serverTs + 2000) {
+                    console.warn(`[loadDataAndSync] 本機已確認同步時間(${lastSyncedTs}) > 伺服器(${serverTs})，以本機 localStorage 為準，補推伺服器`);
+                    const localData = getFullDataSnapshot();
+                    // 保留本機資料，並在稍後補推（此時 CURRENT_USER 已設定）
+                    bestRemoteData = localData;
+                    setTimeout(() => saveAllDataToServer(true), 500);
+                }
             } else if (serverResult && serverResult.gasRestoreInProgress) {
                 // 伺服器正在背景從 GAS 還原，輪詢等待（最多 30 秒）
                 _gasRestoreWasInProgress = true;
@@ -879,8 +893,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveAllDataToServer(forceOverride = false) {
         if (!CURRENT_USER) return;
 
-        // 防止並行儲存
-        if (_isSaving) { console.log('Save already in progress, skipping'); return; }
+        // 防止並行儲存：若正在儲存中，標記 pending，待本次完成後補執行
+        if (_isSaving) {
+            _pendingSave = true;
+            if (forceOverride) _pendingSaveForce = true;
+            console.log('Save already in progress, queuing pending save');
+            return;
+        }
 
         // 資料已過期警告
         if (_isDataStale && !forceOverride) {
@@ -940,6 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 儲存成功：更新同步狀態
             LAST_SYNCED_TIMESTAMP = data.timestamp;
+            store.setRaw('lastSyncedTimestamp', String(data.timestamp)); // 持久化，跨重載可用
             _baseSnapshot = JSON.parse(JSON.stringify(data));
             _isDataStale = false;
 
@@ -953,6 +973,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             PENDING_SAVE_TIMESTAMP = null;
             _isSaving = false;
+            // 若儲存過程中有新的儲存需求，補執行一次
+            if (_pendingSave) {
+                const wasForce = _pendingSaveForce;
+                _pendingSave = false;
+                _pendingSaveForce = false;
+                setTimeout(() => saveAllDataToServer(wasForce), 200);
+            }
         }
     }
 
@@ -1602,6 +1629,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
+            // 先確保伺服器端資料是最新的（避免 GAS 備份的是最新但伺服器是舊的）
+            await saveAllDataToServer(true);
+
             const data = getFullDataSnapshot();
             data.userId = CURRENT_USER;
             // 附加 idToken（若有效）以通過 GAS 端 OAuth 驗證
