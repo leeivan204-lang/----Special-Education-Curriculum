@@ -1041,7 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 merged.schemaVersion = SCHEMA_VERSION;
                 importDataToMemory(merged);
                 _baseSnapshot = JSON.parse(JSON.stringify(merged));
-                LAST_SYNCED_TIMESTAMP = serverData.timestamp;
+                LAST_SYNCED_TIMESTAMP = merged.timestamp; // 應用 merged.timestamp，不是 serverData.timestamp
                 _isDataStale = false;
                 saveAllDataToServer(true); // force 儲存合併結果
                 showSnackbar('✅ 已自動合併其他裝置的變更', null, 3000);
@@ -1844,20 +1844,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Helper: Get Full Data Snapshot
+    // 直接讀取記憶體中的全域變數，確保取得最新狀態
+    // 不從 localStorage 讀取，避免「更新記憶體但 localStorage 尚未同步」時快照過舊的問題
     function getFullDataSnapshot() {
         return {
             schemaVersion: SCHEMA_VERSION,
             timestamp: Date.now(), // UTC 毫秒整數，避免時區格式差異造成比對錯誤
-            courses: store.get('courses', []),
-            teachers: store.get('teachers', []),
-            students: store.get('students', []),
-            scheduleData: store.get('scheduleData', {}),
-            assignments: store.get('assignments', {}),
-            implementationDates: store.get('implementationDates', {}),
-            teacherPartTimeMarks: store.get('teacherPartTimeMarks', {}),
-            studentManualEntries: store.get('studentManualEntries', {}),
-            slotOverrides: store.get('slotOverrides', {}),
-            scheduleTitle: store.get('scheduleTitle', {})
+            courses: courses,
+            teachers: teachers,
+            students: students,
+            scheduleData: scheduleData,
+            assignments: assignments,
+            implementationDates: implementationDates,
+            teacherPartTimeMarks: teacherPartTimeMarks,
+            studentManualEntries: studentManualEntries,
+            slotOverrides: slotOverrides,
+            scheduleTitle: scheduleTitle
         };
     }
 
@@ -3015,8 +3017,7 @@ document.addEventListener('DOMContentLoaded', () => {
             delete slotOverrides[slotKey][id];
             if (Object.keys(slotOverrides[slotKey]).length === 0) delete slotOverrides[slotKey];
         });
-        saveAllDataToServer();
-        saveCourses();
+        saveCourses(); // saveCourses() 內部已呼叫 saveAllDataToServer()，不需重複呼叫
         renderCourseList();
         updateGroupingCourseSelect();
         renderMasterSchedule();
@@ -3026,8 +3027,7 @@ document.addEventListener('DOMContentLoaded', () => {
             assignments = prevAssignments;
             scheduleData = prevScheduleData;
             slotOverrides = prevSlotOverrides;
-            saveAllDataToServer();
-            saveCourses();
+            saveCourses(); // saveCourses() 內部已呼叫 saveAllDataToServer()
             renderCourseList();
             updateGroupingCourseSelect();
             renderMasterSchedule();
@@ -3038,8 +3038,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const student = students.find(s => s.id === id);
         if (!student) return;
 
-        // Save snapshot for undo
+        // Save snapshot for undo（含原始位置，undo 後能插回原處）
         const deletedStudent = JSON.parse(JSON.stringify(student));
+        const prevStudentIndex = students.findIndex(s => s.id === id);
         const prevAssignments = JSON.parse(JSON.stringify(assignments));
         const prevSlotOverrides = JSON.parse(JSON.stringify(slotOverrides));
 
@@ -3060,19 +3061,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         });
-        saveAllDataToServer();
-        saveStudents();
+        saveStudents(); // saveStudents() 內部已呼叫 saveAllDataToServer()，不需重複呼叫
         renderStudentList();
         if (groupingCourseSelect.value) {
             renderGroupingWorkspace(parseInt(groupingCourseSelect.value));
         }
 
         showSnackbar(`已刪除學生「${student.name}」`, function () {
-            students.push(deletedStudent);
+            // undo：插回原位而非 push 到末尾，以維持排序
+            if (prevStudentIndex >= 0 && prevStudentIndex <= students.length) {
+                students.splice(prevStudentIndex, 0, deletedStudent);
+            } else {
+                students.push(deletedStudent);
+            }
             assignments = prevAssignments;
             slotOverrides = prevSlotOverrides;
-            saveAllDataToServer();
-            saveStudents();
+            saveStudents(); // saveStudents() 內部已呼叫 saveAllDataToServer()
             renderStudentList();
             if (groupingCourseSelect.value) {
                 renderGroupingWorkspace(parseInt(groupingCourseSelect.value));

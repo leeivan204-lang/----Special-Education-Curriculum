@@ -264,9 +264,13 @@ def on_editor_acquire(data):
         if existing['sid'] not in socket_to_user:
             logger.info(f"[EditorLock] Ghost lock detected for {user_id} (sid={existing['sid']} disconnected), releasing")
             del editor_locks[user_id]
-            # 也清除等待佇列中該幽靈 sid
+            # 也清除等待佇列中該幽靈 sid，清空後移除鍵值避免記憶體洩漏
             if user_id in pending_edit_requests:
-                pending_edit_requests[user_id] = [r for r in pending_edit_requests[user_id] if r['sid'] in socket_to_user]
+                cleaned = [r for r in pending_edit_requests[user_id] if r['sid'] in socket_to_user]
+                if cleaned:
+                    pending_edit_requests[user_id] = cleaned
+                else:
+                    del pending_edit_requests[user_id]
         else:
             # 真的有其他線上編輯者 → 本人成為檢視者
             emit('editor_acquire_result', {
