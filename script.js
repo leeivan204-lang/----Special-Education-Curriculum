@@ -938,30 +938,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     setTimeout(() => saveAllDataToServer(true), 500);
                 }
             } else if (serverResult && serverResult.gasRestoreInProgress) {
-                // 伺服器正在背景從 GAS 還原，輪詢等待（最多 30 秒）
+                // 伺服器正在背景從 GAS 還原 → 不阻塞，立即進入 App 顯示空畫面
+                // 還原完成後由 socket.on('gas_restore_ready') 自動觸發資料刷新
                 _gasRestoreWasInProgress = true;
-                console.log('[loadDataAndSync] GAS restore in progress, polling...');
-                showSnackbar('🔄 正在從 Google Sheet 還原備份資料，請稍候...', null, 25000);
-                for (let i = 0; i < 15; i++) {
-                    await new Promise(r => setTimeout(r, 2000)); // 每 2 秒查一次
-                    const retry = await fetch(
-                        `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
-                    ).then(r => r.json()).catch(() => null);
-                    if (retry && retry.success && retry.data) {
-                        bestRemoteData = retry.data;
-                        showSnackbar('✅ 備份資料已還原', null, 2000);
-                        break;
-                    }
-                    // 若 GAS 確認無資料，提早結束輪詢
-                    if (retry && retry.success && !retry.gasRestoreInProgress && !retry.data) {
-                        console.log('[loadDataAndSync] GAS confirmed no backup, stopping poll');
-                        _gasRestoreWasInProgress = false;
-                        break;
-                    }
-                }
-                if (!bestRemoteData && _gasRestoreWasInProgress) {
-                    showSnackbar('⚠️ 備份還原超時，稍後可重新整理頁面', null, 5000);
-                }
+                console.log('[loadDataAndSync] GAS restore in progress, entering app immediately...');
+                showSnackbar('🔄 正在從 Google Sheet 還原備份資料，完成後自動載入...', null, 20000);
             }
 
             // --- B. 使用遠端資料 ---
