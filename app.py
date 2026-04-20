@@ -533,10 +533,38 @@ GAS_WEBHOOK_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec'
 )
 GAS_ENABLED = bool(GAS_WEBHOOK_URL)
+# 伺服器端與 GAS 溝通用的密鑰（繞過 OAuth，直接驗證）
+# 需與 GAS script properties 中的 SERVER_KEY 相同
+# Render 環境變數：GAS_SERVER_KEY
+GAS_SERVER_KEY = os.environ.get('GAS_SERVER_KEY', '')
 
 # 記錄哪些 user_id 已確認 GAS 無備份（避免每次登入都去 hit GAS）
 _gas_empty_cache = set()
 _gas_empty_cache_lock = threading.Lock()
+
+# ===== 記憶體快取（減少磁碟 I/O，加速讀取）=====
+# user_id -> {'data': dict, 'ts': float}
+_data_cache = {}
+_data_cache_lock = threading.Lock()
+DATA_CACHE_TTL = 120  # 快取有效秒數
+
+def _cache_get(user_id):
+    """讀取記憶體快取；過期或不存在回傳 None。"""
+    with _data_cache_lock:
+        entry = _data_cache.get(user_id)
+        if entry and (_time.time() - entry['ts']) < DATA_CACHE_TTL:
+            return entry['data']
+    return None
+
+def _cache_set(user_id, data):
+    """寫入記憶體快取。"""
+    with _data_cache_lock:
+        _data_cache[user_id] = {'data': data, 'ts': _time.time()}
+
+def _cache_invalidate(user_id):
+    """清除指定 user_id 的快取。"""
+    with _data_cache_lock:
+        _data_cache.pop(user_id, None)
 
 def push_to_gas_async(user_id, data):
     """背景執行緒推送資料到 GAS Google Sheet，不阻塞主請求。"""
@@ -549,6 +577,9 @@ def push_to_gas_async(user_id, data):
         try:
             payload = dict(data) if isinstance(data, dict) else {}
             payload['userId'] = user_id
+            # 若有設定 Server Key，加入 payload（GAS 優先以 serverKey 驗證，不需 OAuth）
+            if GAS_SERVER_KEY:
+                payload['serverKey'] = GAS_SERVER_KEY
             body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
             req = urllib.request.Request(
                 GAS_WEBHOOK_URL,
@@ -576,13 +607,17 @@ def pull_from_gas(user_id, timeout=12):
             return None
     try:
         url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
+        # 若有設定 Server Key，附加於 URL query（GAS 優先以 serverKey 驗證）
+        if GAS_SERVER_KEY:
+            url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
         logger.info(f"[GAS] Pulling data for userId={user_id} (timeout={timeout}s)...")
         # GAS 會先 302 redirect → 需手動追蹤（最多 5 次）
         req = urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/GAS-pull'})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode('utf-8')
         result = json.loads(body)
-        if result.get('status') == 'success' and result.get('data'):
+        # 相容新版 GAS（同時有 success + status 欄位）與舊版（只有 status）
+        if (result.get('success') or result.get('status') == 'success') and result.get('data'):
             data = result['data']
             # GAS 存放的是完整 payload，可能含 userId 欄位，去除以免干擾
             if isinstance(data, dict):
@@ -671,6 +706,8 @@ def _start_gas_restore_bg(user_id, file_path):
                     with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
                         json.dump(restored, f, ensure_ascii=False, indent=2)
                     os.replace(tmp_path, file_path)
+                    # 同步更新記憶體快取
+                    _cache_set(user_id, restored)
                     logger.info(f"[GAS/BG] Restored {user_id} to local file")
                 except Exception as e:
                     logger.warning(f"[GAS/BG] Failed to write restored data: {e}")
@@ -703,10 +740,16 @@ def get_data(user_id):
     file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
 
     try:
+        # 優先讀取記憶體快取（減少磁碟 I/O）
+        cached = _cache_get(user_id)
+        if cached is not None:
+            return jsonify({'success': True, 'data': cached, 'fromCache': True})
+
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             data = migrate_data(data)
+            _cache_set(user_id, data)  # 寫入快取
             return jsonify({'success': True, 'data': data})
         else:
             # 本機無資料 → 確認狀態
@@ -770,8 +813,11 @@ def save_data(user_id):
     try:
         # Check for conflicts if not forcing
         if not force_save and os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                existing_file_content = json.load(f)
+            # 優先從快取讀取現有資料（減少磁碟 I/O）
+            existing_file_content = _cache_get(user_id)
+            if existing_file_content is None:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    existing_file_content = json.load(f)
             
             # Extract timestamp from existing data
             existing_timestamp = existing_file_content.get('timestamp')
@@ -804,6 +850,9 @@ def save_data(user_id):
             except OSError:
                 pass
             raise
+
+        # 更新記憶體快取（讓下一次 GET 可直接命中快取）
+        _cache_set(user_id, new_data)
 
         # Broadcast update to room
         try:

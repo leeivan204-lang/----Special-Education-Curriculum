@@ -4,20 +4,26 @@
  * 【部署前設定步驟】
  *
  * 1. 開啟此 Apps Script 專案
- * 2. 點擊左側「專案設定」(齒輪圖示) → 「指令碼屬性」→「新增屬性」，設定以下兩項：
+ * 2. 點擊左側「專案設定」(齒輪圖示) → 「指令碼屬性」→「新增屬性」，設定以下項目：
  *
  *    屬性名稱              | 值（範例）
  *    ----------------------|-----------------------------------------------
  *    ALLOWED_EMAILS        | teacher@gmail.com,admin@school.edu.tw
- *                          | （逗號分隔，只有這些 Google 帳號可存取資料）
+ *                          | （逗號分隔，留空則不限制 email）
  *    GOOGLE_CLIENT_ID      | 123456789-xxxx.apps.googleusercontent.com
- *                          | （與 script.js 中的 GOOGLE_CLIENT_ID 相同）
+ *                          | （與 script.js 中的 GOOGLE_CLIENT_ID 相同，可留空）
+ *    SERVER_KEY            | 任意自訂密鑰，例如 my-secret-2026
+ *                          | （與 Render 環境變數 GAS_SERVER_KEY 相同）
  *
  * 3. 點擊「部署」→「管理部署作業」→「新增部署」：
  *    - 類型：Web 應用程式
  *    - 執行身分：我（部署者）
- *    - 誰可以存取：所有人（Anyone）← 必須設為 Anyone 才能接收外部請求
- *    - 部署後複製 Web 應用程式網址，貼到 script.js 的 GAS_API_URL
+ *    - 誰可以存取：所有人（Anyone）
+ *    - 部署後複製 Web 應用程式網址，貼到 Render 環境變數 GAS_WEBHOOK_URL
+ *
+ * 4. 設定 Keepalive 觸發器（防止 GAS 冷啟動）：
+ *    - 點擊左側「觸發器」(鬧鐘圖示)
+ *    - 新增觸發器：函數 keepAlive、時間驅動、每 5 分鐘
  *
  * =====================================================
  */
@@ -30,74 +36,122 @@ var SHEET_NAME = '課表資料';
 /**
  * 處理 GET 請求（讀取使用者資料）
  * 呼叫方式：GET ?userId=XXX&idToken=YYY
+ *         或 GET ?userId=XXX&serverKey=ZZZ  （後端伺服器使用）
+ *         或 GET ?ping=1                    （保溫用，快速回應）
  */
 function doGet(e) {
-  var userId = (e.parameter && e.parameter.userId) ? e.parameter.userId : null;
-  var idToken = (e.parameter && e.parameter.idToken) ? e.parameter.idToken : null;
+  // --- Ping / 保溫快速回應 ---
+  if (e.parameter && e.parameter.ping) {
+    return jsonResponse({ status: 'ok', ts: new Date().toISOString() });
+  }
 
-  // 身分驗證
-  var auth = verifyToken(idToken);
+  var userId    = (e.parameter && e.parameter.userId)    ? e.parameter.userId    : null;
+  var idToken   = (e.parameter && e.parameter.idToken)   ? e.parameter.idToken   : null;
+  var serverKey = (e.parameter && e.parameter.serverKey) ? e.parameter.serverKey : null;
+
+  // --- 身分驗證：Server Key 優先，其次 OAuth Token ---
+  var auth = verifyAccess(idToken, serverKey);
   if (!auth.valid) {
-    return jsonResponse({ success: false, error: '身分驗證失敗：' + auth.reason });
+    return jsonResponse({ success: false, status: 'error', error: '身分驗證失敗：' + auth.reason });
   }
 
   if (!userId || !isValidUserId(userId)) {
-    return jsonResponse({ success: false, error: '無效的 userId' });
+    return jsonResponse({ success: false, status: 'error', error: '無效的 userId' });
   }
 
   try {
     var data = readUserData(userId);
-    return jsonResponse({ success: true, data: data });
+    if (data) {
+      return jsonResponse({ success: true, status: 'success', data: data });
+    } else {
+      return jsonResponse({ success: true, status: 'success', data: null, message: '此 userId 尚無備份資料' });
+    }
   } catch (err) {
-    return jsonResponse({ success: false, error: '讀取失敗：' + err.toString() });
+    return jsonResponse({ success: false, status: 'error', error: '讀取失敗：' + err.toString() });
   }
 }
 
 /**
  * 處理 POST 請求（寫入使用者資料 / 雲端備份）
  * 請求 body 為 JSON 字串：{ userId, idToken, ...課表資料 }
+ *                     或：{ userId, serverKey, ...課表資料 }
  */
 function doPost(e) {
   var body;
   try {
     body = JSON.parse(e.postData.contents);
   } catch (err) {
-    return jsonResponse({ success: false, error: '無效的 JSON 格式' });
+    return jsonResponse({ success: false, status: 'error', error: '無效的 JSON 格式' });
   }
 
-  var idToken = body.idToken || null;
-  var userId  = body.userId  || null;
+  var idToken   = body.idToken   || null;
+  var serverKey = body.serverKey || null;
+  var userId    = body.userId    || null;
 
-  // 身分驗證
-  var auth = verifyToken(idToken);
+  // --- 身分驗證：Server Key 優先，其次 OAuth Token ---
+  var auth = verifyAccess(idToken, serverKey);
   if (!auth.valid) {
-    return jsonResponse({ success: false, error: '身分驗證失敗：' + auth.reason });
+    return jsonResponse({ success: false, status: 'error', error: '身分驗證失敗：' + auth.reason });
   }
 
   if (!userId || !isValidUserId(userId)) {
-    return jsonResponse({ success: false, error: '無效的 userId' });
+    return jsonResponse({ success: false, status: 'error', error: '無效的 userId' });
   }
 
   try {
-    // 儲存前移除 idToken（不將 token 寫入 Sheet）
+    // 儲存前移除認證欄位（不寫入 Sheet）
     delete body.idToken;
+    delete body.serverKey;
     writeUserData(userId, body);
-    return jsonResponse({ success: true, message: '備份成功', timestamp: new Date().toISOString() });
+    return jsonResponse({ success: true, status: 'success', message: '備份成功', timestamp: new Date().toISOString() });
   } catch (err) {
-    return jsonResponse({ success: false, error: '寫入失敗：' + err.toString() });
+    return jsonResponse({ success: false, status: 'error', error: '寫入失敗：' + err.toString() });
   }
 }
 
-// ===== OAuth Token 驗證 =====
+// ===== 保溫 Keepalive（設定時間觸發器每 5 分鐘執行一次）=====
+
+/**
+ * 保溫函數：設定時間觸發器後，每 5 分鐘自動執行，防止 GAS 冷啟動。
+ * 設定方式：觸發器 → 新增 → 函數 keepAlive → 時間驅動 → 每 5 分鐘
+ */
+function keepAlive() {
+  Logger.log('[keepAlive] ' + new Date().toISOString() + ' - GAS script is warm.');
+  // 讀取一次 ScriptProperties 以確保服務被初始化（加速後續請求）
+  PropertiesService.getScriptProperties().getProperty('SERVER_KEY');
+}
+
+// ===== 身分驗證 =====
+
+/**
+ * 統一身分驗證入口：Server Key 優先（後端伺服器使用），否則驗證 OAuth Token
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+function verifyAccess(idToken, serverKey) {
+  // 方式一：Server Key（後端伺服器使用，不需 OAuth）
+  if (serverKey) {
+    var props = PropertiesService.getScriptProperties();
+    var expectedKey = props.getProperty('SERVER_KEY') || '';
+    if (!expectedKey) {
+      // 尚未設定 SERVER_KEY → 為向下相容，允許通過（可在設定後啟用限制）
+      return { valid: true, reason: 'no-key-configured' };
+    }
+    if (serverKey === expectedKey) {
+      return { valid: true };
+    }
+    return { valid: false, reason: 'Server Key 錯誤' };
+  }
+
+  // 方式二：Google OAuth ID Token（前端使用者使用）
+  return verifyToken(idToken);
+}
 
 /**
  * 呼叫 Google tokeninfo 端點驗證 ID token
- * @param {string} idToken - 前端傳來的 Google ID Token (JWT)
- * @returns {{ valid: boolean, email?: string, reason?: string }}
  */
 function verifyToken(idToken) {
   if (!idToken) {
-    return { valid: false, reason: '未提供 token' };
+    return { valid: false, reason: '未提供 token 或 serverKey' };
   }
 
   var props = PropertiesService.getScriptProperties();
@@ -113,17 +167,14 @@ function verifyToken(idToken) {
 
     var payload = JSON.parse(resp.getContentText());
 
-    // 檢查 token 是否過期
     if (!payload.exp || parseInt(payload.exp) < Math.floor(Date.now() / 1000)) {
       return { valid: false, reason: 'token 已過期' };
     }
 
-    // 驗證 audience（client_id）：防止其他應用的 token 被濫用
     if (expectedClientId && payload.aud !== expectedClientId) {
       return { valid: false, reason: '無效的 audience' };
     }
 
-    // 驗證 email 是否在允許清單中
     var allowedEmails = getAllowedEmails();
     if (allowedEmails.length > 0 && allowedEmails.indexOf(payload.email) === -1) {
       return { valid: false, reason: '此帳號未獲授權：' + payload.email };
@@ -136,10 +187,6 @@ function verifyToken(idToken) {
   }
 }
 
-/**
- * 從指令碼屬性讀取允許存取的 email 清單
- * @returns {string[]}
- */
 function getAllowedEmails() {
   var props = PropertiesService.getScriptProperties();
   var raw = props.getProperty('ALLOWED_EMAILS') || '';
@@ -148,9 +195,6 @@ function getAllowedEmails() {
 
 // ===== 資料讀寫 =====
 
-/**
- * 取得或建立資料 Sheet
- */
 function getOrCreateSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_NAME);
@@ -158,7 +202,6 @@ function getOrCreateSheet() {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(['userId', 'data', 'updatedAt']);
     sheet.setFrozenRows(1);
-    // 設定欄寬
     sheet.setColumnWidth(1, 120);
     sheet.setColumnWidth(2, 600);
     sheet.setColumnWidth(3, 180);
@@ -166,11 +209,6 @@ function getOrCreateSheet() {
   return sheet;
 }
 
-/**
- * 讀取指定 userId 的資料
- * @param {string} userId
- * @returns {Object|null}
- */
 function readUserData(userId) {
   var sheet = getOrCreateSheet();
   var values = sheet.getDataRange().getValues();
@@ -184,21 +222,15 @@ function readUserData(userId) {
       }
     }
   }
-  return null; // 新使用者，無資料
+  return null;
 }
 
-/**
- * 寫入或更新指定 userId 的資料
- * @param {string} userId
- * @param {Object} dataObj
- */
 function writeUserData(userId, dataObj) {
   var sheet = getOrCreateSheet();
   var values = sheet.getDataRange().getValues();
   var now = new Date().toISOString();
   var jsonStr = JSON.stringify(dataObj);
 
-  // 找到已存在的列並更新
   for (var i = 1; i < values.length; i++) {
     if (values[i][0] === userId) {
       sheet.getRange(i + 1, 2).setValue(jsonStr);
@@ -207,28 +239,16 @@ function writeUserData(userId, dataObj) {
     }
   }
 
-  // 新使用者，新增一列
   sheet.appendRow([userId, jsonStr, now]);
 }
 
 // ===== 工具函式 =====
 
-/**
- * 驗證 userId 格式（防止注入或異常輸入）
- * @param {string} userId
- * @returns {boolean}
- */
 function isValidUserId(userId) {
-  // 只允許長度 1-64 的字串，不允許路徑分隔符
   return typeof userId === 'string' && userId.length >= 1 && userId.length <= 64 &&
     !/[\/\\<>]/.test(userId);
 }
 
-/**
- * 回傳 JSON 格式的 ContentService 輸出
- * @param {Object} obj
- * @returns {ContentService.TextOutput}
- */
 function jsonResponse(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
