@@ -703,7 +703,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'courses', 'students', 'teachers', 'assignments', 'scheduleData',
             'teacherPartTimeMarks', 'scheduleTitle', 'implementationDates',
             'studentManualEntries', 'slotOverrides',
-            'lastSavedTimestamp', 'lastCloudBackupTimestamp'
+            'lastSavedTimestamp', 'lastCloudBackupTimestamp',
+            'lastSyncedTimestamp'  // 必須清除，避免新用戶登入時誤判為「本機比伺服器新」
         ];
         APP_STORAGE_KEYS.forEach(k => store.remove(k));
     }
@@ -845,6 +846,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 進入主 App（載入資料 + 切換畫面）──
     async function enterApp(forceRole = null, offlineMode = false) {
         if (forceRole) MY_ROLE = forceRole;
+
+        // 重置記憶體與 localStorage，確保不殘留前一用戶的資料
+        // loadDataAndSync() 會從伺服器重新載入當前用戶的正確資料
+        resetState();
+        LAST_SYNCED_TIMESTAMP = null;
+        _baseSnapshot = null;
+        _isDataStale = false;
 
         // 載入資料
         await loadDataAndSync();
