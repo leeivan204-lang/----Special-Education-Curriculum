@@ -236,8 +236,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to WebSocket server');
         if (CURRENT_USER) {
             socket.emit('join', { userId: CURRENT_USER });
-            // 重新連線時嘗試恢復角色
-            socket.emit('editor_acquire', { userId: CURRENT_USER });
+            // 重新連線時恢復角色：僅當使用者是編輯者才重新取鎖
+            // 若使用者明確選擇「檢視者」，不自動升級
+            if (MY_ROLE !== 'viewer') {
+                socket.emit('editor_acquire', { userId: CURRENT_USER });
+            }
         }
     });
 
@@ -275,6 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 編輯權相關事件 ---
     socket.on('editor_acquire_result', (data) => {
         if (data.success) {
+            // 若使用者明確選擇「檢視者」，忽略 WebSocket 的自動授權
+            if (MY_ROLE === 'viewer') return;
             MY_ROLE = 'editor';
             CURRENT_EDITOR_SID = socket.id;
             startEditorHeartbeat();
@@ -295,17 +300,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!state.hasEditor) {
             // 目前無人持有編輯權
-            if (MY_ROLE === 'editor') {
-                // 我本來是編輯者但鎖被清了（idle timeout 等）→ 重新 acquire
-                socket.emit('editor_acquire', { userId: CURRENT_USER });
-            } else {
-                // 沒有編輯者 → 嘗試自動搶位
-                socket.emit('editor_acquire', { userId: CURRENT_USER });
-            }
+            // 若使用者明確選擇「檢視者」，不自動搶位
+            if (MY_ROLE === 'viewer') return;
+            // 我本來是編輯者（鎖被清了）或尚未取鎖 → 重新 acquire
+            socket.emit('editor_acquire', { userId: CURRENT_USER });
             return; // 等 editor_acquire_result 再更新 UI
         }
 
         if (state.editorSid === socket.id) {
+            // 若使用者明確選擇「檢視者」，即使 socket 被識別為 editor 也不升級
+            if (MY_ROLE === 'viewer') return;
             MY_ROLE = 'editor';
         } else {
             if (MY_ROLE === 'editor') {
@@ -834,7 +838,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 MY_ROLE = 'viewer';
             }
 
-            socket.emit('editor_acquire', { userId: CURRENT_USER }); // WebSocket 也補送一次
+            // 只有選擇「編輯者」才補送 WebSocket acquire；
+            // 選「檢視者」不送，避免被伺服器自動授予編輯權
+            if (MY_ROLE !== 'viewer') {
+                socket.emit('editor_acquire', { userId: CURRENT_USER });
+            }
             await enterApp();
 
         } finally {
