@@ -681,6 +681,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const registerBtn = document.getElementById('btn-register');
     const loginInput = document.getElementById('login-id');
     const loginMessage = document.getElementById('login-message');
+    const serverStatusEl = document.getElementById('server-status');
+
+    // ── 頁面載入後立即預熱伺服器 + GAS ──
+    // Render 免費方案冷啟動需 15-30 秒，頁面一打開就先 ping，
+    // 讓使用者輸入 ID 的這段時間同步完成伺服器與 GAS 的暖機。
+    (async function warmUpOnLoad() {
+        if (serverStatusEl) serverStatusEl.innerHTML = '🔄 連線伺服器中...';
+        if (loginBtn) loginBtn.disabled = true;
+        try {
+            // 最多等 45 秒（Render 冷啟動最壞情況約 30 秒）
+            const resp = await fetchWithTimeout(`${API_BASE}/ping`, {}, 45000);
+            if (resp) {
+                if (serverStatusEl) serverStatusEl.innerHTML = '✅ 伺服器已連線';
+                if (loginBtn) loginBtn.disabled = false;
+                // 淡出狀態文字
+                setTimeout(() => {
+                    if (serverStatusEl) serverStatusEl.style.opacity = '0';
+                }, 3000);
+            } else {
+                if (serverStatusEl) serverStatusEl.innerHTML = '⚠️ 伺服器連線逾時，仍可嘗試登入';
+                if (loginBtn) loginBtn.disabled = false;
+            }
+        } catch (e) {
+            if (serverStatusEl) serverStatusEl.innerHTML = '⚠️ 無法連線伺服器，可能為離線模式';
+            if (loginBtn) loginBtn.disabled = false;
+        }
+    })();
 
     // Login Event Listeners
     if (loginBtn) {
@@ -784,18 +811,43 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoginError('');
 
         try {
-            // 1. 驗證 User ID（逾時 8 秒，超時走離線模式）
-            const loginRaw = await fetchWithTimeout(`${API_BASE}/login`, {
+            // 1. 驗證 User ID
+            // 第一次嘗試（8 秒）；若逾時代表伺服器仍在冷啟動，自動再試一次（35 秒）
+            let loginRaw = await fetchWithTimeout(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify({ userId })
             }, 8000);
+
+            if (!loginRaw) {
+                // 第一次逾時 → 伺服器仍在啟動，顯示等待訊息並重試
+                loginBtn.textContent = '啟動中...';
+                showLoginError('⏳ 伺服器啟動中，請稍候（約 15-30 秒）...');
+                loginRaw = await fetchWithTimeout(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ userId })
+                }, 35000);
+            }
+
             const loginResult = loginRaw
                 ? await loginRaw.json().catch(() => ({ success: false }))
                 : null;
 
-            if (!loginResult || !loginResult.success) {
-                throw new Error((loginResult && loginResult.message) || '登入失敗');
+            showLoginError(''); // 清除等待訊息
+
+            if (!loginResult) {
+                // 兩次都逾時 → 進入離線模式並明確告知
+                showLoginError('⚠️ 伺服器無回應，以離線模式進入（資料可能不完整）');
+                CURRENT_USER = userId;
+                await enterApp('editor', true);
+                return;
+            }
+
+            if (!loginResult.success) {
+                // 伺服器明確回應錯誤（例如 ID 格式不合）→ 顯示錯誤，不進入 App
+                showLoginError(loginResult.message || '登入失敗，請確認 ID');
+                return;
             }
 
             // 2. 加入 WebSocket 房間
@@ -817,10 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error(err);
-            // 離線模式：無伺服器時，自動以編輯者進入
-            console.warn('Server unavailable, entering offline editor mode');
-            CURRENT_USER = userId;
-            await enterApp('editor', true);
+            showLoginError('登入發生錯誤：' + err.message);
         } finally {
             loginBtn.disabled = false;
             loginBtn.textContent = '登入';
@@ -1041,11 +1090,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let bestRemoteData = null;
             let _gasRestoreWasInProgress = false;
-            // 若伺服器逾時（冷啟動），直接以空資料進入，稍後可手動重新整理
+            // 若伺服器逾時（冷啟動），當作 gasRestoreInProgress 處理
+            // → 顯示還原橫幅讓用戶知道仍在等待，並在 30 秒後自動重試
             if (serverResult && serverResult.error === 'timeout') {
-                console.warn('[loadDataAndSync] 伺服器回應逾時，以空資料進入 App');
-                showSnackbar('⚠️ 伺服器啟動中，資料暫時無法載入，請稍後按「重新整理」', null, 6000);
-                return { gasRestoreInProgress: false };
+                console.warn('[loadDataAndSync] 伺服器回應逾時，顯示還原橫幅等待重試');
+                return { gasRestoreInProgress: true };
             }
             const serverHasData = serverResult && serverResult.success && serverResult.data;
 

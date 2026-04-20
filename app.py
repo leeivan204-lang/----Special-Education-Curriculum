@@ -508,6 +508,29 @@ def editor_takeover_http():
     logger.info(f"[EditorLock/HTTP] Admin takeover for {user_id} by {sid_to_use}")
     return jsonify({'success': True, 'role': 'editor', 'since': now})
 
+# --- 健康檢查 / 預熱端點 ---
+@app.route('/api/ping', methods=['GET'])
+def api_ping():
+    """輕量健康檢查，同時在背景觸發 GAS 預熱（避免 GAS 冷啟動延遲資料還原）。"""
+    # 背景 ping GAS（僅當 GAS 已設定且距上次 ping 超過 3 分鐘）
+    if GAS_ENABLED:
+        now = _time.time()
+        last = getattr(api_ping, '_last_gas_ping', 0)
+        if now - last > 180:
+            api_ping._last_gas_ping = now
+            def _gas_warmup():
+                try:
+                    url = f"{GAS_WEBHOOK_URL}?ping=1"
+                    urllib.request.urlopen(
+                        urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/warmup'}),
+                        timeout=12
+                    ).read()
+                    logger.info("[Ping] GAS warmup OK")
+                except Exception as e:
+                    logger.debug(f"[Ping] GAS warmup: {e}")
+            threading.Thread(target=_gas_warmup, daemon=True, name='gas-warmup').start()
+    return jsonify({'status': 'ok', 'ts': _time.time()})
+
 # --- 簡易速率限制（記憶體內，適用於單機部署） ---
 from collections import defaultdict
 
