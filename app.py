@@ -728,7 +728,7 @@ def _start_gas_restore_bg(user_id, file_path):
 
     def _restore():
         try:
-            restored = pull_from_gas(user_id, timeout=15)
+            restored = pull_from_gas(user_id, timeout=25)
             if restored:
                 _file_written = False
                 try:
@@ -801,6 +801,27 @@ def get_data(user_id):
     except Exception as e:
         logger.error(f"Error reading data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
+
+# API: Force GAS Restore（清除確認空快取，強制重新從 GAS 拉取）
+@app.route('/api/gas-restore-force/<user_id>', methods=['POST'])
+def gas_restore_force(user_id):
+    """手動強制重試 GAS 還原。清除 confirmed_empty / empty_cache，重啟背景拉取。"""
+    if not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
+    if not GAS_ENABLED:
+        return jsonify({'success': False, 'message': 'GAS not configured'}), 503
+
+    # 清除快取，允許重新從 GAS 拉取
+    with _gas_empty_cache_lock:
+        _gas_empty_cache.discard(user_id)
+    with _gas_restore_lock:
+        _gas_restore_confirmed_empty.discard(user_id)
+        _gas_restore_in_progress.discard(user_id)  # 若前次卡住，也一併清除
+
+    file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
+    _start_gas_restore_bg(user_id, file_path)
+    logger.info(f"[GAS/Force] Forced restore triggered for userId={user_id}")
+    return jsonify({'success': True, 'message': '已觸發強制 GAS 還原，請等待 gas_restore_ready 通知'})
 
 # API: Save Data
 @app.route('/api/data/<user_id>', methods=['POST'])

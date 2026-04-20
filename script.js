@@ -1023,21 +1023,53 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRetry.textContent = '重新載入';
         btnRetry.style.cssText = 'background:#1c1917;color:#fbbf24;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:0.88em;white-space:nowrap;';
         btnRetry.onclick = async () => {
-            msg.textContent = '🔄 載入中...';
+            msg.textContent = '🔄 重新連線 Google Sheet...';
             btnRetry.disabled = true;
-            const syncResult = await loadDataAndSync();
+
+            // 先嘗試先讀本機（可能已被 gas_restore_ready 寫入但事件漏收）
+            const quickSync = await loadDataAndSync();
             if (!document.getElementById('gas-restore-banner')) return;
-            refreshAllViews();
-            const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
-            if (hasData) {
+            const hasDataNow = students.length > 0 || courses.length > 0 || teachers.length > 0;
+            if (hasDataNow) {
+                refreshAllViews();
                 banner.remove();
                 showSnackbar('✅ 備份資料已還原', null, 2500);
-            } else if (syncResult && syncResult.gasRestoreInProgress) {
-                msg.textContent = '🔄 Google Sheet 還原中，請稍後再試...';
-                btnRetry.disabled = false;
-                btnRetry.textContent = '再試一次';
-            } else {
-                msg.textContent = '⚠️ 尚無備份資料，或 Google Sheet 尚未設定';
+                return;
+            }
+
+            // 本機仍無資料 → 呼叫 force-restore，清除後端快取並重啟 GAS 拉取
+            try {
+                msg.textContent = '🔄 強制從 Google Sheet 重新取得資料...';
+                const forceResp = await fetchWithTimeout(
+                    `${API_BASE}/gas-restore-force/${encodeURIComponent(CURRENT_USER)}`,
+                    { method: 'POST', headers: API_HEADERS }, 10000
+                );
+                if (forceResp && forceResp.ok) {
+                    msg.textContent = '⏳ 已觸發還原，等待 Google Sheet 回應（約 15-30 秒）...';
+                    // 等待 gas_restore_ready WebSocket 通知（由伺服器推送）
+                    // 若 30 秒後仍未到，自動再 loadDataAndSync 一次
+                    setTimeout(async () => {
+                        if (!document.getElementById('gas-restore-banner')) return;
+                        const retrySync = await loadDataAndSync();
+                        if (!document.getElementById('gas-restore-banner')) return;
+                        refreshAllViews();
+                        const hasData2 = students.length > 0 || courses.length > 0 || teachers.length > 0;
+                        if (hasData2) {
+                            banner.remove();
+                            showSnackbar('✅ 備份資料已還原', null, 2500);
+                        } else {
+                            msg.textContent = '⚠️ 無法從 Google Sheet 取得資料，請確認 GAS 設定';
+                            btnRetry.disabled = false;
+                            btnRetry.textContent = '再試一次';
+                        }
+                    }, 30000);
+                } else {
+                    msg.textContent = '⚠️ 伺服器無回應，請稍後再試';
+                    btnRetry.disabled = false;
+                    btnRetry.textContent = '再試一次';
+                }
+            } catch (e) {
+                msg.textContent = '⚠️ 網路錯誤，請確認連線後重試';
                 btnRetry.disabled = false;
                 btnRetry.textContent = '再試一次';
             }
@@ -1050,11 +1082,12 @@ document.addEventListener('DOMContentLoaded', () => {
         banner.appendChild(btnClose);
         document.body.appendChild(banner);
 
-        // 自動重試迴圈：每 30 秒嘗試一次，最多 4 次（保底，防止 gas_restore_ready 未觸發）
+        // 自動重試迴圈：每 30 秒嘗試一次，最多 4 次。
+        // 第 2 次起若後端已確認空（gasRestoreInProgress: false），改呼叫 force-restore 清除快取。
         let _bannerRetryCount = 0;
         const MAX_BANNER_RETRIES = 4;
         async function _bannerAutoRetry() {
-            if (!document.getElementById('gas-restore-banner')) return; // 已被移除（手動關閉或 socket 事件）
+            if (!document.getElementById('gas-restore-banner')) return; // 已被移除
             if (_bannerRetryCount >= MAX_BANNER_RETRIES) {
                 msg.textContent = '⚠️ 無法還原備份，可手動點「重新載入」';
                 btnRetry.disabled = false;
@@ -1063,20 +1096,33 @@ document.addEventListener('DOMContentLoaded', () => {
             _bannerRetryCount++;
             msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
             btnRetry.disabled = true;
+
+            // 第 2 次起：先呼叫 force-restore 清除後端 confirmed_empty 快取
+            // 避免後端因先前的 "GAS 回傳空" 快取而永不重試
+            if (_bannerRetryCount >= 2) {
+                try {
+                    await fetchWithTimeout(
+                        `${API_BASE}/gas-restore-force/${encodeURIComponent(CURRENT_USER)}`,
+                        { method: 'POST', headers: API_HEADERS }, 8000
+                    );
+                } catch (_) { /* 忽略，繼續 loadDataAndSync */ }
+                // 給 GAS 20 秒啟動時間，再 loadDataAndSync 取結果
+                await new Promise(r => setTimeout(r, 20000));
+                if (!document.getElementById('gas-restore-banner')) return;
+            }
+
             const syncResult = await loadDataAndSync();
-            if (!document.getElementById('gas-restore-banner')) return; // 被移除（例如 socket 事件先到）
+            if (!document.getElementById('gas-restore-banner')) return;
             refreshAllViews();
             const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
             if (hasData) {
                 banner.remove();
                 showSnackbar('✅ 備份資料已還原', null, 2500);
             } else if (syncResult && syncResult.gasRestoreInProgress) {
-                // 伺服器還在還原中，繼續等待
                 msg.textContent = `🔄 Google Sheet 還原中，請稍候... (第 ${_bannerRetryCount} 次)`;
                 btnRetry.disabled = false;
                 setTimeout(_bannerAutoRetry, 30000);
             } else {
-                // 非 inProgress：可能真的沒資料，或短暫錯誤，仍繼續重試
                 msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
                 btnRetry.disabled = false;
                 setTimeout(_bannerAutoRetry, 30000);
