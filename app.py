@@ -618,9 +618,9 @@ def push_to_gas_async(user_id, data):
     t = threading.Thread(target=_push, daemon=True, name=f"gas-push-{user_id}")
     t.start()
 
-def pull_from_gas(user_id, timeout=12):
+def pull_from_gas(user_id, timeout=25):
     """從 GAS 取得該 userId 的最新備份資料。找不到或失敗時回傳 None。
-    timeout 設 12 秒因為 GAS 首次執行（冷啟動）需要 5-15 秒。
+    timeout 設 25 秒：GAS 冷啟動最長需 15-20 秒。
     """
     if not GAS_ENABLED:
         return None
@@ -639,19 +639,25 @@ def pull_from_gas(user_id, timeout=12):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode('utf-8')
         result = json.loads(body)
+        gas_ok = result.get('success') or result.get('status') == 'success'
         # 相容新版 GAS（同時有 success + status 欄位）與舊版（只有 status）
-        if (result.get('success') or result.get('status') == 'success') and result.get('data'):
+        if gas_ok and result.get('data'):
             data = result['data']
             # GAS 存放的是完整 payload，可能含 userId 欄位，去除以免干擾
             if isinstance(data, dict):
                 data.pop('userId', None)
             logger.info(f"[GAS] Restore found for userId={user_id}")
             return data
-        else:
-            # GAS 明確回覆「此 userId 沒有備份」→ 才放入快取
-            logger.info(f"[GAS] No backup for userId={user_id}: {result.get('message')}")
+        elif gas_ok and not result.get('data'):
+            # GAS 明確回覆成功但無資料 → 該 userId 確實尚無備份，放入快取避免重複請求
+            logger.info(f"[GAS] No backup found for userId={user_id}: {result.get('message')}")
             with _gas_empty_cache_lock:
                 _gas_empty_cache.add(user_id)
+        else:
+            # GAS 回傳錯誤（驗證失敗、伺服器錯誤等）→ 不放入快取，下次仍可重試
+            # 常見原因：SERVER_KEY 未設定、GAS 尚未重新部署
+            logger.warning(f"[GAS] Auth/server error for userId={user_id}: "
+                           f"success={result.get('success')}, error={result.get('error', result.get('message', ''))}")
     except Exception as e:
         # timeout / 網路錯誤 → 不放入快取（下次仍會重試）
         logger.warning(f"[GAS] Restore failed for userId={user_id}: {e} (will retry next time)")

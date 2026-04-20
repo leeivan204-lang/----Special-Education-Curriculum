@@ -411,7 +411,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ userId, socketId: socket.id || null })
             }, 8000);
             const result = raw ? await raw.json() : null;
-            if (!result) throw new Error('timeout');
+            if (!result) {
+                // 逾時：無法確認鎖狀態，預設保持目前角色（若未設定則為 editor）
+                if (MY_ROLE === null) {
+                    MY_ROLE = 'editor';
+                    CURRENT_EDITOR_SID = socket.id;
+                    startEditorHeartbeat();
+                    renderRoleBar();
+                    applyRoleUI();
+                }
+                return;
+            }
             if (result.success) {
                 if (MY_ROLE !== 'editor') {
                     MY_ROLE = 'editor';
@@ -928,12 +938,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 8000);
                 const lockResp = lockRaw ? await lockRaw.json().catch(() => null) : null;
 
-                if (lockResp && lockResp.success) {
+                if (!lockRaw) {
+                    // 伺服器逾時（冷啟動）→ 無法確認鎖狀態，預設為編輯者（單人使用情境）
+                    MY_ROLE = 'editor';
+                    CURRENT_EDITOR_SID = socket.id || null;
+                    startEditorHeartbeat();
+                } else if (lockResp && lockResp.success) {
                     MY_ROLE = 'editor';
                     CURRENT_EDITOR_SID = socket.id || lockResp.since;
                     startEditorHeartbeat();
                 } else {
-                    // 鎖被佔用 → 改為檢視者
+                    // 伺服器明確回覆：鎖已被其他裝置佔用 → 改為檢視者
                     MY_ROLE = 'viewer';
                     if (roleMessage) roleMessage.textContent = '⚠️ 已有其他裝置持有編輯權，以檢視者身份進入';
                     await new Promise(r => setTimeout(r, 1500));
