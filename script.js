@@ -226,6 +226,27 @@ document.addEventListener('DOMContentLoaded', () => {
         'X-Requested-With': 'XMLHttpRequest'
     };
 
+    /**
+     * 帶逾時的 fetch：超過 timeoutMs 毫秒自動 abort，回傳 null 而不拋例外。
+     * 預設 8 秒，適合 Render 免費方案冷啟動場景。
+     */
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const resp = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(tid);
+            return resp;
+        } catch (err) {
+            clearTimeout(tid);
+            if (err.name === 'AbortError') {
+                console.warn(`[fetchWithTimeout] 請求逾時 (${timeoutMs}ms): ${url}`);
+                return null;
+            }
+            throw err;
+        }
+    }
+
     // Initialize Socket.IO（連線 URL 跟隨 API_BASE 的 origin）
     const SOCKET_URL = (window.location.protocol === 'file:' || window.location.hostname === '')
         ? 'http://localhost:3000'
@@ -375,12 +396,13 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function acquireEditorViaHttp(userId) {
         try {
-            const resp = await fetch(`${API_BASE}/editor/acquire`, {
+            const raw = await fetchWithTimeout(`${API_BASE}/editor/acquire`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify({ userId, socketId: socket.id || null })
-            });
-            const result = await resp.json();
+            }, 8000);
+            const result = raw ? await raw.json() : null;
+            if (!result) throw new Error('timeout');
             if (result.success) {
                 if (MY_ROLE !== 'editor') {
                     MY_ROLE = 'editor';
@@ -827,12 +849,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (chosenRole === 'editor') {
-                // 嘗試取得編輯鎖
-                const lockResp = await fetch(`${API_BASE}/editor/acquire`, {
+                // 嘗試取得編輯鎖（逾時 8 秒，冷啟動時不卡住）
+                const lockRaw = await fetchWithTimeout(`${API_BASE}/editor/acquire`, {
                     method: 'POST',
                     headers: API_HEADERS,
                     body: JSON.stringify({ userId: CURRENT_USER, socketId: socket.id || null })
-                }).then(r => r.json()).catch(() => null);
+                }, 8000);
+                const lockResp = lockRaw ? await lockRaw.json().catch(() => null) : null;
 
                 if (lockResp && lockResp.success) {
                     MY_ROLE = 'editor';
@@ -988,13 +1011,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             console.log('Starting data sync process...');
 
-            // 從伺服器取得資料（伺服器負責 GAS 同步）
-            const serverResult = await fetch(
-                `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`
-            ).then(r => r.json()).catch(err => ({ success: false, error: err }));
+            // 從伺服器取得資料（逾時 10 秒，冷啟動時不無限等待）
+            const _dataRaw = await fetchWithTimeout(
+                `${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}?_t=${Date.now()}`,
+                {}, 10000
+            );
+            const serverResult = _dataRaw
+                ? await _dataRaw.json().catch(err => ({ success: false, error: err }))
+                : { success: false, error: 'timeout' };
 
             let bestRemoteData = null;
             let _gasRestoreWasInProgress = false;
+            // 若伺服器逾時（冷啟動），直接以空資料進入，稍後可手動重新整理
+            if (serverResult && serverResult.error === 'timeout') {
+                console.warn('[loadDataAndSync] 伺服器回應逾時，以空資料進入 App');
+                showSnackbar('⚠️ 伺服器啟動中，資料暫時無法載入，請稍後按「重新整理」', null, 6000);
+                return { gasRestoreInProgress: false };
+            }
             const serverHasData = serverResult && serverResult.success && serverResult.data;
 
             if (serverHasData) {
