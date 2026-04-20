@@ -446,16 +446,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const editorInfo = isPending
             ? '⏳ 正在取得編輯權限...'
             : (isEditor
-                ? '✏️ 編輯模式（您正在編輯）'
-                : `👁️ 檢視模式（目前編輯者：其他裝置${CURRENT_EDITOR_SID ? ' (' + CURRENT_EDITOR_SID.slice(0, 6) + ')' : ''}）`);
-        bar.style.cssText = `position:relative;width:100%;padding:8px 14px;color:#fff;display:flex;justify-content:center;align-items:center;gap:12px;box-sizing:border-box;font-weight:600;font-size:0.95em;z-index:10000;${isPending
+                ? '✏️ 編輯模式'
+                : '👁️ 檢視模式');
+        const bgColor = isPending
             ? 'background:linear-gradient(90deg,#6b7280 0%,#9ca3af 100%);'
             : (isEditor
                 ? 'background:linear-gradient(90deg,#059669 0%,#10b981 100%);'
-                : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);')}`;
+                : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);');
+        bar.style.cssText = `position:relative;width:100%;padding:6px 14px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:10px;box-sizing:border-box;font-weight:600;font-size:0.92em;z-index:10000;${bgColor}`;
         bar.innerHTML = '';
+
+        // 左側：登入 ID（醒目顯示）
+        const userChip = document.createElement('span');
+        userChip.textContent = `👤 ${CURRENT_USER}`;
+        userChip.style.cssText = 'background:rgba(255,255,255,0.22);padding:3px 12px;border-radius:20px;font-size:0.95em;font-weight:700;letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30vw;flex-shrink:0;';
+        userChip.title = CURRENT_USER;
+        bar.appendChild(userChip);
+
+        // 中間：角色狀態
         const msg = document.createElement('span');
         msg.textContent = editorInfo;
+        msg.style.cssText = 'flex:1;text-align:center;';
         bar.appendChild(msg);
         if (isPending) {
             // 尚未確認角色，不顯示按鈕
@@ -863,7 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _isDataStale = false;
 
         // 載入資料
-        await loadDataAndSync();
+        const syncResult = await loadDataAndSync();
 
         // 切換畫面
         const roleSection = document.getElementById('role-section');
@@ -879,6 +890,69 @@ document.addEventListener('DOMContentLoaded', () => {
         if (offlineMode) {
             showSnackbar('離線模式：無法連線至伺服器，資料僅存於本機', null, 4000);
         }
+
+        // 若 GAS 正在背景還原，顯示提示橫幅 + 30 秒自動重試保底
+        if (syncResult && syncResult.gasRestoreInProgress) {
+            _showGasRestoreBanner();
+        }
+    }
+
+    // GAS 還原中橫幅（含手動重試按鈕與自動重試保底）
+    function _showGasRestoreBanner() {
+        let banner = document.getElementById('gas-restore-banner');
+        if (banner) return; // 已顯示
+        banner = document.createElement('div');
+        banner.id = 'gas-restore-banner';
+        banner.style.cssText = [
+            'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);',
+            'background:#f59e0b;color:#1c1917;padding:10px 18px;border-radius:10px;',
+            'font-weight:600;font-size:0.93em;z-index:9999;',
+            'display:flex;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);',
+            'max-width:90vw;text-align:center;'
+        ].join('');
+        const msg = document.createElement('span');
+        msg.textContent = '🔄 正在從 Google Sheet 還原備份資料...';
+        banner.appendChild(msg);
+        const btnRetry = document.createElement('button');
+        btnRetry.textContent = '重新載入';
+        btnRetry.style.cssText = 'background:#1c1917;color:#fbbf24;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:0.88em;white-space:nowrap;';
+        btnRetry.onclick = async () => {
+            msg.textContent = '🔄 載入中...';
+            btnRetry.disabled = true;
+            await loadDataAndSync();
+            refreshAllViews();
+            const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
+            if (hasData) {
+                banner.remove();
+                showSnackbar('✅ 備份資料已還原', null, 2500);
+            } else {
+                msg.textContent = '⚠️ 尚無備份資料，或還原仍在進行中';
+                btnRetry.disabled = false;
+                btnRetry.textContent = '再試一次';
+            }
+        };
+        banner.appendChild(btnRetry);
+        const btnClose = document.createElement('button');
+        btnClose.textContent = '✕';
+        btnClose.style.cssText = 'background:transparent;color:#1c1917;border:none;cursor:pointer;font-size:1.1em;padding:0 4px;';
+        btnClose.onclick = () => banner.remove();
+        banner.appendChild(btnClose);
+        document.body.appendChild(banner);
+
+        // 30 秒後自動重試一次（保底，防止 gas_restore_ready 未觸發）
+        setTimeout(async () => {
+            if (!document.getElementById('gas-restore-banner')) return;
+            await loadDataAndSync();
+            refreshAllViews();
+            const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
+            if (hasData) {
+                banner.remove();
+                showSnackbar('✅ 備份資料已還原', null, 2500);
+            } else {
+                msg.textContent = '⚠️ 無法還原備份，可手動點「重新載入」';
+                if (btnRetry) btnRetry.disabled = false;
+            }
+        }, 30000);
     }
 
     function showLoginError(msg) {
@@ -942,7 +1016,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 還原完成後由 socket.on('gas_restore_ready') 自動觸發資料刷新
                 _gasRestoreWasInProgress = true;
                 console.log('[loadDataAndSync] GAS restore in progress, entering app immediately...');
-                showSnackbar('🔄 正在從 Google Sheet 還原備份資料，完成後自動載入...', null, 20000);
             }
 
             // --- B. 使用遠端資料 ---
@@ -964,10 +1037,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.warn('Critical error during loadDataAndSync:', err);
-            // Fallback: Just let the user continue with whatever is in local memory
-            // alert('資料同步發生錯誤，將使用離線模式。');
         }
 
+        return { gasRestoreInProgress: _gasRestoreWasInProgress };
     }
 
     async function saveToCustomServer(data) {
