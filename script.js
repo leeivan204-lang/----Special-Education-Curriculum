@@ -525,12 +525,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 先送 WebSocket，再用 HTTP 備援（Render WebSocket 可能不穩）
                 socket.emit('editor_takeover', { userId: CURRENT_USER, adminPassword: pwd });
                 try {
-                    const resp = await fetch(`${API_BASE}/editor/takeover`, {
+                    const raw = await fetchWithTimeout(`${API_BASE}/editor/takeover`, {
                         method: 'POST',
                         headers: API_HEADERS,
                         body: JSON.stringify({ userId: CURRENT_USER, adminPassword: pwd, socketId: socket.id || null })
-                    });
-                    const result = await resp.json();
+                    }, 8000);
+                    const result = raw ? await raw.json() : null;
+                    if (!result) throw new Error('timeout');
                     if (result.success) {
                         MY_ROLE = 'editor';
                         CURRENT_EDITOR_SID = socket.id;
@@ -765,29 +766,32 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoginError('');
 
         try {
-            // 1. 驗證 User ID
-            const loginResp = await fetch(`${API_BASE}/login`, {
+            // 1. 驗證 User ID（逾時 8 秒，超時走離線模式）
+            const loginRaw = await fetchWithTimeout(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify({ userId })
-            });
-            const loginResult = await loginResp.json().catch(() => ({ success: false }));
+            }, 8000);
+            const loginResult = loginRaw
+                ? await loginRaw.json().catch(() => ({ success: false }))
+                : null;
 
-            if (!loginResult.success) {
-                throw new Error(loginResult.message || '登入失敗');
+            if (!loginResult || !loginResult.success) {
+                throw new Error((loginResult && loginResult.message) || '登入失敗');
             }
 
             // 2. 加入 WebSocket 房間
             CURRENT_USER = userId;
             socket.emit('join', { userId });
 
-            // 3. 查詢目前是否已有人持有編輯鎖，供選擇身分時顯示
+            // 3. 查詢目前是否已有人持有編輯鎖（逾時 5 秒，失敗不影響登入）
             let currentEditorInfo = null;
             try {
-                const statusResp = await fetch(`${API_BASE}/editor/status/${encodeURIComponent(userId)}`, {
-                    headers: API_HEADERS
-                });
-                currentEditorInfo = await statusResp.json().catch(() => null);
+                const statusRaw = await fetchWithTimeout(
+                    `${API_BASE}/editor/status/${encodeURIComponent(userId)}`,
+                    { headers: API_HEADERS }, 5000
+                );
+                currentEditorInfo = statusRaw ? await statusRaw.json().catch(() => null) : null;
             } catch (_) { /* 離線時忽略 */ }
 
             // 4. 顯示身分別選擇頁面
@@ -1135,11 +1139,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 force: forceOverride  // 僅在使用者明確選擇「強制覆蓋」或自動合併後才為 true
             };
 
-            const response = await fetch(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
+            const response = await fetchWithTimeout(`${API_BASE}/data/${encodeURIComponent(CURRENT_USER)}`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify(payload)
-            });
+            }, 15000); // 儲存允許較長（資料量可能較大），但最多 15 秒
+
+            if (!response) {
+                setSaveStatus('error');
+                showSnackbar('⚠️ 儲存逾時，請確認網路後重試', null, 4000);
+                return;
+            }
 
             // --- 409 衝突處理 ---
             if (response.status === 409) {
