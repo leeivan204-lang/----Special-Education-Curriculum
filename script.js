@@ -1025,14 +1025,19 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRetry.onclick = async () => {
             msg.textContent = '🔄 載入中...';
             btnRetry.disabled = true;
-            await loadDataAndSync();
+            const syncResult = await loadDataAndSync();
+            if (!document.getElementById('gas-restore-banner')) return;
             refreshAllViews();
             const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
             if (hasData) {
                 banner.remove();
                 showSnackbar('✅ 備份資料已還原', null, 2500);
+            } else if (syncResult && syncResult.gasRestoreInProgress) {
+                msg.textContent = '🔄 Google Sheet 還原中，請稍後再試...';
+                btnRetry.disabled = false;
+                btnRetry.textContent = '再試一次';
             } else {
-                msg.textContent = '⚠️ 尚無備份資料，或還原仍在進行中';
+                msg.textContent = '⚠️ 尚無備份資料，或 Google Sheet 尚未設定';
                 btnRetry.disabled = false;
                 btnRetry.textContent = '再試一次';
             }
@@ -1045,20 +1050,39 @@ document.addEventListener('DOMContentLoaded', () => {
         banner.appendChild(btnClose);
         document.body.appendChild(banner);
 
-        // 30 秒後自動重試一次（保底，防止 gas_restore_ready 未觸發）
-        setTimeout(async () => {
-            if (!document.getElementById('gas-restore-banner')) return;
-            await loadDataAndSync();
+        // 自動重試迴圈：每 30 秒嘗試一次，最多 4 次（保底，防止 gas_restore_ready 未觸發）
+        let _bannerRetryCount = 0;
+        const MAX_BANNER_RETRIES = 4;
+        async function _bannerAutoRetry() {
+            if (!document.getElementById('gas-restore-banner')) return; // 已被移除（手動關閉或 socket 事件）
+            if (_bannerRetryCount >= MAX_BANNER_RETRIES) {
+                msg.textContent = '⚠️ 無法還原備份，可手動點「重新載入」';
+                btnRetry.disabled = false;
+                return;
+            }
+            _bannerRetryCount++;
+            msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
+            btnRetry.disabled = true;
+            const syncResult = await loadDataAndSync();
+            if (!document.getElementById('gas-restore-banner')) return; // 被移除（例如 socket 事件先到）
             refreshAllViews();
             const hasData = students.length > 0 || courses.length > 0 || teachers.length > 0;
             if (hasData) {
                 banner.remove();
                 showSnackbar('✅ 備份資料已還原', null, 2500);
+            } else if (syncResult && syncResult.gasRestoreInProgress) {
+                // 伺服器還在還原中，繼續等待
+                msg.textContent = `🔄 Google Sheet 還原中，請稍候... (第 ${_bannerRetryCount} 次)`;
+                btnRetry.disabled = false;
+                setTimeout(_bannerAutoRetry, 30000);
             } else {
-                msg.textContent = '⚠️ 無法還原備份，可手動點「重新載入」';
-                if (btnRetry) btnRetry.disabled = false;
+                // 非 inProgress：可能真的沒資料，或短暫錯誤，仍繼續重試
+                msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
+                btnRetry.disabled = false;
+                setTimeout(_bannerAutoRetry, 30000);
             }
-        }, 30000);
+        }
+        setTimeout(_bannerAutoRetry, 30000);
     }
 
     function showLoginError(msg) {
