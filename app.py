@@ -522,7 +522,7 @@ def api_ping():
                 try:
                     url = f"{GAS_WEBHOOK_URL}?ping=1"
                     urllib.request.urlopen(
-                        urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/warmup'}),
+                        urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT}),
                         timeout=12
                     ).read()
                     logger.info("[Ping] GAS warmup OK")
@@ -556,6 +556,10 @@ GAS_WEBHOOK_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec'
 )
 GAS_ENABLED = bool(GAS_WEBHOOK_URL)
+
+# Google Apps Script 會擋下看起來像爬蟲的 User-Agent（Python-urllib/*）→ 回 401 Unauthorized
+# 使用瀏覽器風格的 User-Agent 避免被反機器人機制誤判
+GAS_USER_AGENT = 'Mozilla/5.0 (compatible; SpecialEdSchedule/1.0; +https://special-education-curriculum.onrender.com)'
 # 伺服器端與 GAS 溝通用的密鑰（繞過 OAuth，直接驗證）
 # 需與 GAS script properties 中的 SERVER_KEY 相同
 # Render 環境變數：GAS_SERVER_KEY
@@ -607,7 +611,10 @@ def push_to_gas_async(user_id, data):
             req = urllib.request.Request(
                 GAS_WEBHOOK_URL,
                 data=body,
-                headers={'Content-Type': 'text/plain;charset=utf-8'},
+                headers={
+                    'Content-Type': 'text/plain;charset=utf-8',
+                    'User-Agent': GAS_USER_AGENT,
+                },
                 method='POST'
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -635,7 +642,7 @@ def pull_from_gas(user_id, timeout=25):
             url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
         logger.info(f"[GAS] Pulling data for userId={user_id} (timeout={timeout}s)...")
         # GAS 會先 302 redirect → 需手動追蹤（最多 5 次）
-        req = urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/GAS-pull'})
+        req = urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode('utf-8')
         result = json.loads(body)
@@ -859,7 +866,7 @@ def gas_diagnose(user_id):
         url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
         if GAS_SERVER_KEY:
             url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/GAS-diag'})
+        req = urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT})
         import time as _t_mod
         t0 = _t_mod.time()
         with urllib.request.urlopen(req, timeout=30) as resp:
