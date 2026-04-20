@@ -469,6 +469,45 @@ def editor_acquire_http():
     logger.info(f"[EditorLock/HTTP] {sid_to_use} acquired editor for {user_id}")
     return jsonify({'success': True, 'role': 'editor', 'since': now})
 
+@app.route('/api/editor/takeover', methods=['POST'])
+def editor_takeover_http():
+    """HTTP-based admin takeover，用於 WebSocket 不穩時的備援。"""
+    data = request.json or {}
+    user_id = data.get('userId')
+    password = data.get('adminPassword', '')
+    caller_sid = data.get('socketId')
+
+    if not user_id or not is_valid_user_id(user_id):
+        return jsonify({'success': False, 'message': 'Invalid userId'}), 400
+
+    if not ADMIN_PASSWORD:
+        return jsonify({'success': False, 'message': '伺服器未設定管理員密碼'}), 403
+
+    if password != ADMIN_PASSWORD:
+        return jsonify({'success': False, 'message': '密碼錯誤'}), 403
+
+    prev = editor_locks.get(user_id)
+    now = _time.time()
+    sid_to_use = caller_sid or f"http-admin-{user_id}-{now}"
+    editor_locks[user_id] = {'sid': sid_to_use, 'since': now, 'last_activity': now}
+
+    # 透過 WebSocket 通知被踢出的舊編輯者（若在線）
+    if prev and prev['sid'] != sid_to_use:
+        try:
+            socketio.emit('editor_kicked', {
+                'userId': user_id,
+                'message': '管理員已接管編輯權，您已切換為檢視者'
+            }, to=prev['sid'])
+        except Exception:
+            pass
+        try:
+            socketio.emit('editor_changed', _get_editor_info(user_id), room=user_id)
+        except Exception:
+            pass
+
+    logger.info(f"[EditorLock/HTTP] Admin takeover for {user_id} by {sid_to_use}")
+    return jsonify({'success': True, 'role': 'editor', 'since': now})
+
 # --- 簡易速率限制（記憶體內，適用於單機部署） ---
 from collections import defaultdict
 

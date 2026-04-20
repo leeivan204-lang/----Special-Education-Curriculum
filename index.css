@@ -3356,6 +3356,12 @@ body.viewer-mode #btn-cloud-backup {
     pointer-events: auto !important;
 }
 
+/* 檢視模式下，學生年級標籤不可點擊（toggleGrade 也有程式守衛） */
+body.viewer-mode .student-grade {
+    pointer-events: none !important;
+    cursor: default !important;
+}
+
 /* ===== 多裝置衝突解決 UI ===== */
 .conflict-modal-overlay {
     position: fixed;

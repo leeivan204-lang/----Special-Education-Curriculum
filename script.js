@@ -259,16 +259,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('presence_warning', (data) => {
+        // 僅作通知用，角色已由登入時的身分別選擇決定，不在此更動
         console.log('Presence warning:', data);
         showPresenceToast(data.message);
-        // presence_warning 只發給新加入者，代表「房間裡已有人在編輯」
-        // → 自己應為檢視者（除非 acquireEditorViaHttp 後來確認可拿到鎖）
-        if (MY_ROLE !== 'editor') {
-            MY_ROLE = 'viewer';
-            stopEditorHeartbeat();
-            renderRoleBar();
-            applyRoleUI();
-        }
     });
 
     // GAS 背景還原完成通知 → 自動重載資料
@@ -489,10 +482,30 @@ document.addEventListener('DOMContentLoaded', () => {
             btnAdmin.textContent = '管理員模式';
             btnAdmin.className = 'viewer-allowed';
             btnAdmin.style.cssText = 'background:transparent;color:#fff;border:1px solid #fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.82em;';
-            btnAdmin.onclick = () => {
+            btnAdmin.onclick = async () => {
                 const pwd = prompt('請輸入管理員密碼以強制接管編輯權：');
-                if (pwd) {
-                    socket.emit('editor_takeover', { userId: CURRENT_USER, adminPassword: pwd });
+                if (!pwd) return;
+                // 先送 WebSocket，再用 HTTP 備援（Render WebSocket 可能不穩）
+                socket.emit('editor_takeover', { userId: CURRENT_USER, adminPassword: pwd });
+                try {
+                    const resp = await fetch(`${API_BASE}/editor/takeover`, {
+                        method: 'POST',
+                        headers: API_HEADERS,
+                        body: JSON.stringify({ userId: CURRENT_USER, adminPassword: pwd, socketId: socket.id || null })
+                    });
+                    const result = await resp.json();
+                    if (result.success) {
+                        MY_ROLE = 'editor';
+                        CURRENT_EDITOR_SID = socket.id;
+                        startEditorHeartbeat();
+                        renderRoleBar();
+                        applyRoleUI();
+                        showSnackbar('✅ 已強制取得編輯權', null, 2000);
+                    } else {
+                        showSnackbar('❌ ' + (result.message || '接管失敗'), null, 3000);
+                    }
+                } catch (e) {
+                    showSnackbar('❌ 網路錯誤，接管失敗', null, 3000);
                 }
             };
             bar.appendChild(btnAdmin);
@@ -659,6 +672,20 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/'/g, '&#39;');
     }
 
+    // ── 身分別按鈕事件（在 DOMContentLoaded 後綁定）──
+    const btnEnterEditor = document.getElementById('btn-enter-editor');
+    const btnEnterViewer = document.getElementById('btn-enter-viewer');
+    const btnBackLogin   = document.getElementById('btn-back-login');
+    if (btnEnterEditor) btnEnterEditor.addEventListener('click', () => handleRoleSelect('editor'));
+    if (btnEnterViewer) btnEnterViewer.addEventListener('click', () => handleRoleSelect('viewer'));
+    if (btnBackLogin) btnBackLogin.addEventListener('click', () => {
+        const roleSection = document.getElementById('role-section');
+        if (roleSection) roleSection.style.display = 'none';
+        loginSection.style.display = 'flex';
+        CURRENT_USER = null;
+        MY_ROLE = null;
+    });
+
     function resetState() {
         console.log('Resetting state for new user...');
         courses = [];
@@ -681,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
         APP_STORAGE_KEYS.forEach(k => store.remove(k));
     }
 
+    // ── 登入流程：Step 1 — 驗證 User ID，成功後顯示身分別選擇 ──
     async function handleLogin() {
         const userId = loginInput.value.trim();
         if (!userId) {
@@ -695,70 +723,145 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         loginBtn.disabled = true;
-        loginBtn.textContent = '登入中...';
-        showLoginError(''); // Clear error
+        loginBtn.textContent = '驗證中...';
+        showLoginError('');
 
         try {
-            // 1. Authenticate
+            // 1. 驗證 User ID
             const loginResp = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: API_HEADERS,
                 body: JSON.stringify({ userId })
             });
-            const loginResult = await loginResp.json();
+            const loginResult = await loginResp.json().catch(() => ({ success: false }));
 
             if (!loginResult.success) {
                 throw new Error(loginResult.message || '登入失敗');
             }
 
+            // 2. 加入 WebSocket 房間
             CURRENT_USER = userId;
+            socket.emit('join', { userId });
 
-            // Join WebSocket Room
-            socket.emit('join', { userId: userId });
+            // 3. 查詢目前是否已有人持有編輯鎖，供選擇身分時顯示
+            let currentEditorInfo = null;
+            try {
+                const statusResp = await fetch(`${API_BASE}/editor/status/${encodeURIComponent(userId)}`, {
+                    headers: API_HEADERS
+                });
+                currentEditorInfo = await statusResp.json().catch(() => null);
+            } catch (_) { /* 離線時忽略 */ }
 
-            // 嘗試取得編輯權（HTTP 為主，WebSocket 為輔）
-            socket.emit('editor_acquire', { userId: userId });
-            await acquireEditorViaHttp(userId);
-
-            // 2. Load Data
-            await loadDataAndSync();
-
-            // 3. Enter App
-            loginSection.classList.add('hidden'); // Add helper class if needed, or inline
-            loginSection.style.display = 'none';
-            mainAppSection.style.display = 'flex';
-            renderRoleBar();
-
-            // 4. Force Re-render
-            refreshAllViews();
+            // 4. 顯示身分別選擇頁面
+            showRoleSection(userId, currentEditorInfo);
 
         } catch (err) {
             console.error(err);
-            // If connection fails, assume offline mode (GitHub Pages or local without server)
-            console.warn('Connection failed, switching to Offline Mode');
-
-            // Proceed as logged in (Offline)
+            // 離線模式：無伺服器時，自動以編輯者進入
+            console.warn('Server unavailable, entering offline editor mode');
             CURRENT_USER = userId;
-
-            // Load local data only
-            // We can just call loadDataAndSync(), its catch block will handle fetch failure 
-            // but we need it to NOT throw so we can proceed.
-            // Actually, loadDataAndSync already catches errors and falls back to local.
-            await loadDataAndSync();
-
-            // Enter App
-            loginSection.classList.add('hidden');
-            loginSection.style.display = 'none';
-            mainAppSection.style.display = 'flex';
-
-            // Force Re-render
-            refreshAllViews();
-
-            // Notify user
-            // Optional: alert('以此 ID 進入離線模式 (Offline Mode)');
+            await enterApp('editor', true);
         } finally {
             loginBtn.disabled = false;
             loginBtn.textContent = '登入';
+        }
+    }
+
+    // ── 顯示身分別選擇頁 ──
+    function showRoleSection(userId, editorInfo) {
+        const roleSection = document.getElementById('role-section');
+        const roleGreeting = document.getElementById('role-greeting');
+        const roleEditorStatus = document.getElementById('role-editor-status');
+        const roleMessage = document.getElementById('role-message');
+
+        if (!roleSection) return;
+
+        roleGreeting.textContent = `歡迎，${userId}　請選擇進入身分`;
+        roleMessage.textContent = '';
+
+        const hasEditor = editorInfo && editorInfo.hasEditor;
+        const btnEditor = document.getElementById('btn-enter-editor');
+        if (hasEditor) {
+            // 已有人在編輯
+            roleEditorStatus.style.background = '#fef3c7';
+            roleEditorStatus.style.color = '#92400e';
+            roleEditorStatus.textContent = '⚠️ 目前已有其他裝置持有編輯權，選擇「編輯者」可嘗試強制取得';
+            if (btnEditor) btnEditor.style.opacity = '0.7';
+        } else {
+            roleEditorStatus.style.background = '#dcfce7';
+            roleEditorStatus.style.color = '#166534';
+            roleEditorStatus.textContent = '✅ 目前無人正在編輯，您可自由選擇身分';
+            if (btnEditor) btnEditor.style.opacity = '1';
+        }
+
+        loginSection.style.display = 'none';
+        roleSection.style.display = 'flex';
+    }
+
+    // ── 登入流程：Step 2 — 選擇身分後進入 App ──
+    async function handleRoleSelect(chosenRole) {
+        const roleSection = document.getElementById('role-section');
+        const roleMessage = document.getElementById('role-message');
+        const btnEditor = document.getElementById('btn-enter-editor');
+        const btnViewer = document.getElementById('btn-enter-viewer');
+
+        if (btnEditor) btnEditor.disabled = true;
+        if (btnViewer) btnViewer.disabled = true;
+        if (roleMessage) roleMessage.textContent = '進入中...';
+
+        try {
+            if (chosenRole === 'editor') {
+                // 嘗試取得編輯鎖
+                const lockResp = await fetch(`${API_BASE}/editor/acquire`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ userId: CURRENT_USER, socketId: socket.id || null })
+                }).then(r => r.json()).catch(() => null);
+
+                if (lockResp && lockResp.success) {
+                    MY_ROLE = 'editor';
+                    CURRENT_EDITOR_SID = socket.id || lockResp.since;
+                    startEditorHeartbeat();
+                } else {
+                    // 鎖被佔用 → 改為檢視者
+                    MY_ROLE = 'viewer';
+                    if (roleMessage) roleMessage.textContent = '⚠️ 已有其他裝置持有編輯權，以檢視者身份進入';
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+            } else {
+                // 直接以檢視者進入
+                MY_ROLE = 'viewer';
+            }
+
+            socket.emit('editor_acquire', { userId: CURRENT_USER }); // WebSocket 也補送一次
+            await enterApp();
+
+        } finally {
+            if (btnEditor) btnEditor.disabled = false;
+            if (btnViewer) btnViewer.disabled = false;
+        }
+    }
+
+    // ── 進入主 App（載入資料 + 切換畫面）──
+    async function enterApp(forceRole = null, offlineMode = false) {
+        if (forceRole) MY_ROLE = forceRole;
+
+        // 載入資料
+        await loadDataAndSync();
+
+        // 切換畫面
+        const roleSection = document.getElementById('role-section');
+        if (roleSection) roleSection.style.display = 'none';
+        loginSection.style.display = 'none';
+        loginSection.classList.add('hidden');
+        mainAppSection.style.display = 'flex';
+
+        renderRoleBar();
+        applyRoleUI();
+        refreshAllViews();
+
+        if (offlineMode) {
+            showSnackbar('離線模式：無法連線至伺服器，資料僅存於本機', null, 4000);
         }
     }
 
@@ -2979,6 +3082,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Global Helpers
     window.toggleGrade = function (event, id) {
         event.stopPropagation(); // Prevent drag start or other clicks
+
+        // 檢視模式下不可修改
+        if (MY_ROLE === 'viewer') return;
 
         // 檢查是否在學生管理頁面
         const studentsView = document.getElementById('students-view');
