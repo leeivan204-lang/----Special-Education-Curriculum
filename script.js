@@ -290,17 +290,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // GAS 背景還原完成通知 → 自動重載資料
     socket.on('gas_restore_ready', async (data) => {
-        console.log('[GAS] Background restore ready:', data);
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`[GAS] 【${timestamp}】Background restore ready:`, data);
+        console.log(`[GAS] mainAppSection exists: ${!!mainAppSection}, display: ${mainAppSection?.style?.display}`);
+
         // 若使用者尚未進入主畫面（仍在登入/身分選擇頁），忽略此事件
         // enterApp() 完成後會自行呼叫 loadDataAndSync()
         if (!mainAppSection || mainAppSection.style.display === 'none') {
-            console.log('[GAS] User not yet in main app, skipping restore refresh');
+            console.warn(`[GAS] ⚠️ User not yet in main app (mainAppSection.display=${mainAppSection?.style?.display}), IGNORING restore event - WILL WAIT FOR BANNER RETRY`);
             return;
         }
+        console.log(`[GAS] ✅ Processing restore event now...`);
         showSnackbar('✅ 備份資料已從 Google Sheet 還原，正在載入...', null, 2000);
         // 移除 GAS 還原橫幅（若還在）
         const banner = document.getElementById('gas-restore-banner');
-        if (banner) banner.remove();
+        if (banner) {
+            console.log(`[GAS] Removing banner (found)`);
+            banner.remove();
+        } else {
+            console.log(`[GAS] No banner to remove`);
+        }
         await loadDataAndSync();
         refreshAllViews();
     });
@@ -1086,14 +1095,23 @@ document.addEventListener('DOMContentLoaded', () => {
         // 第 2 次起若後端已確認空（gasRestoreInProgress: false），改呼叫 force-restore 清除快取。
         let _bannerRetryCount = 0;
         const MAX_BANNER_RETRIES = 4;
+        const _bannerStartTime = Date.now();
         async function _bannerAutoRetry() {
-            if (!document.getElementById('gas-restore-banner')) return; // 已被移除
+            if (!document.getElementById('gas-restore-banner')) {
+                const elapsedSec = ((Date.now() - _bannerStartTime) / 1000).toFixed(1);
+                console.log(`[BANNER] 【${elapsedSec}s】Auto-retry check: banner already removed (likely by gas_restore_ready), exiting`);
+                return; // 已被移除
+            }
             if (_bannerRetryCount >= MAX_BANNER_RETRIES) {
+                const elapsedSec = ((Date.now() - _bannerStartTime) / 1000).toFixed(1);
+                console.warn(`[BANNER] 【${elapsedSec}s】MAX RETRIES REACHED (${MAX_BANNER_RETRIES}). Giving up on automatic restore.`);
                 msg.textContent = '⚠️ 無法還原備份，可手動點「重新載入」';
                 btnRetry.disabled = false;
                 return;
             }
             _bannerRetryCount++;
+            const elapsedSec = ((Date.now() - _bannerStartTime) / 1000).toFixed(1);
+            console.log(`[BANNER] 【${elapsedSec}s】Retry #${_bannerRetryCount} triggered`);
             msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
             btnRetry.disabled = true;
 

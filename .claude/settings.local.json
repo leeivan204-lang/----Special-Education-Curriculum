@@ -8,7 +8,28 @@
       "Bash(grep -oE '#[0-9a-fA-F]{3,6}' \"D:\\\\特教課表Special Education Curriculum\\\\.claude\\\\worktrees\\\\busy-ritchie\\\\index.css\")",
       "Bash(mv /tmp/app_clean.py \"D:\\\\特教課表Special Education Curriculum\\\\.claude\\\\worktrees\\\\busy-ritchie\\\\app.py\")",
       "Bash(python -m pytest tests/test_backend_api.py -v)",
-      "Bash(python -m unittest tests.test_backend_api -v)"
+      "Bash(python -m unittest tests.test_backend_api -v)",
+      "Bash(python app.py)",
+      "Bash(timeout 5)",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(node tests/test_frontend_grouping.js)",
+      "Bash(node tests/test_frontend_scheduling.js)",
+      "Bash(node tests/test_frontend_node.js)",
+      "Bash(node tests/test_frontend_data.js)",
+      "Bash(python -c \"from app import ALLOWED_ORIGINS; print\\(ALLOWED_ORIGINS\\)\")",
+      "Bash(gh pr:*)",
+      "Bash(curl -sSL -m 10 \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec?userId=test\")",
+      "Bash(curl -sSL -m 10 \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec?userId=previewtest\")",
+      "Bash(curl -sSL -m 15 -X POST -H \"Content-Type: text/plain;charset=utf-8\" -d '{\"userId\":\"gas_test\",\"timestamp\":\"2026-04-15T10:00:00\",\"courses\":[{\"id\":1,\"name\":\"GAS測試課程\"}],\"students\":[],\"teachers\":[]}' \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec\")",
+      "Bash(curl -sSL -m 15 -X POST -H \"Content-Type: text/plain;charset=utf-8\" --data-raw '{\"userId\":\"gas_test\",\"timestamp\":\"2026-04-15T10:00:00\",\"courses\":[{\"id\":1,\"name\":\"GAS測試課程\"}]}' \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec\")",
+      "WebFetch(domain:special-education-curriculum.onrender.com)",
+      "Bash(curl -sI \"https://special-education-curriculum.onrender.com/\")",
+      "Bash(curl -s -X POST \"https://special-education-curriculum.onrender.com/api/editor/acquire\" -H \"Content-Type: application/json\" -d '{\"userId\":\"test_ping\",\"socketId\":null}')",
+      "Bash(curl -s -X POST \"https://special-education-curriculum.onrender.com/api/editor/acquire\" -H \"Content-Type: application/json\" -H \"X-Requested-With: XMLHttpRequest\" -d '{\"userId\":\"test_diag\",\"socketId\":\"test-sid-123\"}')",
+      "Bash(curl -s \"https://special-education-curriculum.onrender.com/api/data/test_diag?_t=123\")",
+      "Bash(curl -s \"https://special-education-curriculum.onrender.com/api/editor/debug\")",
+      "Bash(curl -s \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec?userId=test_diag\")",
+      "Bash(curl -sL \"https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec?userId=test_diag\")"
     ]
   }
 }

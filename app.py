@@ -735,7 +735,9 @@ def _start_gas_restore_bg(user_id, file_path):
 
     def _restore():
         try:
+            logger.info(f"[GAS/BG] Starting restoration thread for userId={user_id}, timeout=25s...")
             restored = pull_from_gas(user_id, timeout=25)
+            logger.info(f"[GAS/BG] pull_from_gas returned: {type(restored).__name__} (has data: {bool(restored)})")
             if restored:
                 _file_written = False
                 try:
@@ -755,9 +757,11 @@ def _start_gas_restore_bg(user_id, file_path):
                 # 只有在檔案確實寫入成功後才通知前端（否則前端重新載入仍是空資料）
                 if _file_written:
                     try:
+                        logger.info(f"[GAS/BG] ✅ EMITTING gas_restore_ready for userId={user_id} to room={user_id}")
                         socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
-                    except Exception:
-                        pass
+                        logger.info(f"[GAS/BG] gas_restore_ready emitted successfully")
+                    except Exception as e:
+                        logger.error(f"[GAS/BG] Failed to emit gas_restore_ready: {e}")
                 else:
                     logger.warning(f"[GAS/BG] File write failed for {user_id}, NOT emitting gas_restore_ready")
             else:
