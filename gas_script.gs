@@ -210,6 +210,7 @@ function getOrCreateSheet() {
 }
 
 function readUserData(userId) {
+  // 主要位置：「課表資料」單一工作表，以 userId 為主鍵（新架構）
   var sheet = getOrCreateSheet();
   var values = sheet.getDataRange().getValues();
 
@@ -219,6 +220,43 @@ function readUserData(userId) {
         return JSON.parse(values[i][1]);
       } catch (err) {
         return null;
+      }
+    }
+  }
+
+  // 回溯相容：若「課表資料」找不到，嘗試讀取「以 userId 命名的分頁」
+  // （舊架構：每個 userId 一個獨立分頁，每次備份 append 成一列）
+  return readLegacyUserTab(userId);
+}
+
+/**
+ * 讀取舊版格式：以 userId 命名的分頁，取最後一列的 JSON 內容
+ * 支援多種欄位位置：最新資料通常在 B 欄（JSON 直接存入）或 E 欄（舊格式附 metadata）
+ */
+function readLegacyUserTab(userId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var legacySheet = ss.getSheetByName(userId);
+  if (!legacySheet) return null;
+
+  var lastRow = legacySheet.getLastRow();
+  if (lastRow < 2) return null;  // 只有 header，沒有資料列
+
+  // 讀取最後一列的所有欄位，掃描第一個可解析為 JSON 的儲存格
+  var lastCol = Math.min(legacySheet.getLastColumn(), 10);
+  var row = legacySheet.getRange(lastRow, 1, 1, lastCol).getValues()[0];
+
+  for (var j = 0; j < row.length; j++) {
+    var val = row[j];
+    if (typeof val === 'string' && val.trim().length > 2 && val.trim().charAt(0) === '{') {
+      try {
+        var parsed = JSON.parse(val);
+        // 驗證這看起來像使用者資料（有 courses/students/teachers 任一欄位）
+        if (parsed && (parsed.courses || parsed.students || parsed.teachers || parsed.timestamp)) {
+          Logger.log('[readLegacyUserTab] Found data for ' + userId + ' in col ' + (j+1) + ' of row ' + lastRow);
+          return parsed;
+        }
+      } catch (err) {
+        // 繼續嘗試下一欄
       }
     }
   }
