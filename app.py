@@ -701,16 +701,21 @@ def _start_gas_restore_bg(user_id, file_path):
         try:
             restored = pull_from_gas(user_id, timeout=15)
             if restored:
+                _file_written = False
                 try:
                     tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
                     with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
                         json.dump(restored, f, ensure_ascii=False, indent=2)
                     os.replace(tmp_path, file_path)
-                    # 同步更新記憶體快取
+                    _file_written = True
+                    # 檔案寫入成功後才更新快取，確保兩者一致
                     _cache_set(user_id, restored)
                     logger.info(f"[GAS/BG] Restored {user_id} to local file")
                 except Exception as e:
                     logger.warning(f"[GAS/BG] Failed to write restored data: {e}")
+                    if not _file_written:
+                        try: os.unlink(tmp_path)
+                        except: pass
                 # 通知前端資料已就緒（透過 WebSocket）
                 try:
                     socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)

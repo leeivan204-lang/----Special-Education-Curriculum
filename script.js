@@ -291,7 +291,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // GAS 背景還原完成通知 → 自動重載資料
     socket.on('gas_restore_ready', async (data) => {
         console.log('[GAS] Background restore ready:', data);
+        // 若使用者尚未進入主畫面（仍在登入/身分選擇頁），忽略此事件
+        // enterApp() 完成後會自行呼叫 loadDataAndSync()
+        if (!mainAppSection || mainAppSection.style.display === 'none') {
+            console.log('[GAS] User not yet in main app, skipping restore refresh');
+            return;
+        }
         showSnackbar('✅ 備份資料已從 Google Sheet 還原，正在載入...', null, 2000);
+        // 移除 GAS 還原橫幅（若還在）
+        const banner = document.getElementById('gas-restore-banner');
+        if (banner) banner.remove();
         await loadDataAndSync();
         refreshAllViews();
     });
@@ -745,6 +754,15 @@ document.addEventListener('DOMContentLoaded', () => {
             'lastSyncedTimestamp'  // 必須清除，避免新用戶登入時誤判為「本機比伺服器新」
         ];
         APP_STORAGE_KEYS.forEach(k => store.remove(k));
+
+        // 重置暫態存檔狀態（防止上一個登入 session 的 save 狀態殘留）
+        PENDING_SAVE_TIMESTAMP = null;
+        _isSaving = false;
+        _pendingSave = false;
+        _pendingSaveForce = false;
+        _isDataStale = false;
+        _baseSnapshot = null;
+        LAST_SYNCED_TIMESTAMP = null;
     }
 
     // ── 登入流程：Step 1 — 驗證 User ID，成功後顯示身分別選擇 ──
@@ -894,11 +912,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (forceRole) MY_ROLE = forceRole;
 
         // 重置記憶體與 localStorage，確保不殘留前一用戶的資料
-        // loadDataAndSync() 會從伺服器重新載入當前用戶的正確資料
+        // resetState() 已包含 LAST_SYNCED_TIMESTAMP / _isDataStale / _isSaving 等暫態重置
         resetState();
-        LAST_SYNCED_TIMESTAMP = null;
-        _baseSnapshot = null;
-        _isDataStale = false;
 
         // 載入資料
         const syncResult = await loadDataAndSync();
@@ -1852,23 +1867,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            // 先確保伺服器端資料是最新的（避免 GAS 備份的是最新但伺服器是舊的）
-            await saveAllDataToServer(true);
+            // 儲存至伺服器（伺服器端會自動以 Server Key 備份至 GAS，不需前端直接呼叫 GAS）
+            // 這樣避免了前端無 Server Key 導致 GAS 驗證失敗的問題
+            const saved = await saveAllDataToServer(true);
 
-            const data = getFullDataSnapshot();
-            data.userId = CURRENT_USER;
-            // 附加 idToken（若有效）以通過 GAS 端 OAuth 驗證
-            if (isGoogleTokenValid()) {
-                data.idToken = googleIdToken;
-            }
-
-            await fetch(GAS_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS often likes text/plain to avoid preflight
-                body: JSON.stringify(data)
-            });
-
-            if (!skipConfirm) showSnackbar('備份請求已發送至 Google Cloud！');
+            if (!skipConfirm) showSnackbar('✅ 資料已儲存，後端正在同步至 Google Sheet...', null, 3000);
 
             // Update Cloud Backup Timestamp
             store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
@@ -1878,7 +1881,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error(err);
-            showSnackbar('備份發送失敗，請檢查網路或 CORS 設定：' + err.message);
+            showSnackbar('❌ 備份失敗：' + err.message, null, 4000);
             return false;
         } finally {
             if (btnCloudBackup) {
