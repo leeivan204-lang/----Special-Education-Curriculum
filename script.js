@@ -261,6 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('presence_warning', (data) => {
         console.log('Presence warning:', data);
         showPresenceToast(data.message);
+        // presence_warning 只發給新加入者，代表「房間裡已有人在編輯」
+        // → 自己應為檢視者（除非 acquireEditorViaHttp 後來確認可拿到鎖）
+        if (MY_ROLE !== 'editor') {
+            MY_ROLE = 'viewer';
+            stopEditorHeartbeat();
+            renderRoleBar();
+            applyRoleUI();
+        }
     });
 
     // GAS 背景還原完成通知 → 自動重載資料

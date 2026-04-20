@@ -152,12 +152,13 @@ def on_join(data):
         
         emit('status', {'msg': f'Joined room {user_id}'}, room=user_id)
         
-        # If multiple users are present, warn everyone
+        # 若房間已有其他人，只通知「新加入者」（不廣播給整個房間）
+        # 原有的編輯者不應因為有人加入而收到警告，避免混淆其角色狀態
         if count > 1:
             emit('presence_warning', {
                 'message': '目前已有其他用戶修改內容，避免資料無法同步，請稍等',
                 'count': count
-            }, room=user_id)
+            })  # 不加 room= → 僅送給剛加入的 sid（即 request.sid）
 
 @socketio.on('disconnect')
 def on_disconnect():
