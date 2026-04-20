@@ -823,6 +823,81 @@ def gas_restore_force(user_id):
     logger.info(f"[GAS/Force] Forced restore triggered for userId={user_id}")
     return jsonify({'success': True, 'message': '已觸發強制 GAS 還原，請等待 gas_restore_ready 通知'})
 
+# API: GAS Diagnostic（直接查詢 GAS 並回傳原始結果，協助排查 SERVER_KEY / URL / 資料是否存在）
+@app.route('/api/gas-diagnose/<user_id>', methods=['GET'])
+def gas_diagnose(user_id):
+    """
+    診斷端點：繞過所有快取，直接同步呼叫 GAS，回傳原始 JSON 與 HTTP 狀態。
+    用法：瀏覽器開啟 https://your-render.app/api/gas-diagnose/Spe%20for%20u
+    可同時驗證：
+      1. GAS_WEBHOOK_URL 是否可達
+      2. GAS_SERVER_KEY 是否被 GAS 接受
+      3. 該 userId 在 GAS 上是否真的有資料
+    """
+    if not is_valid_user_id(user_id):
+        return jsonify({'ok': False, 'reason': 'Invalid user ID'}), 400
+
+    diag = {
+        'userId': user_id,
+        'gas_enabled': bool(GAS_ENABLED),
+        'gas_webhook_url_set': bool(GAS_WEBHOOK_URL),
+        'gas_server_key_set': bool(GAS_SERVER_KEY),
+        'gas_server_key_length': len(GAS_SERVER_KEY) if GAS_SERVER_KEY else 0,
+        'in_confirmed_empty': user_id in _gas_restore_confirmed_empty,
+        'in_empty_cache': user_id in _gas_empty_cache,
+        'in_progress': user_id in _gas_restore_in_progress,
+        'local_file_exists': os.path.exists(os.path.join(DATA_DIR, f"{user_id.strip()}.json")),
+        'cache_has_user': _cache_get(user_id) is not None,
+    }
+
+    if not GAS_ENABLED:
+        diag['gas_call'] = 'skipped (GAS_WEBHOOK_URL not set)'
+        return jsonify({'ok': False, 'diag': diag})
+
+    # 直接呼叫 GAS，拿回原始回應
+    try:
+        url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
+        if GAS_SERVER_KEY:
+            url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Python-urllib/GAS-diag'})
+        import time as _t_mod
+        t0 = _t_mod.time()
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            http_status = resp.getcode()
+            raw_body = resp.read().decode('utf-8', errors='replace')
+        diag['gas_http_status'] = http_status
+        diag['gas_elapsed_sec'] = round(_t_mod.time() - t0, 2)
+        diag['gas_raw_response'] = raw_body[:2000]  # 只顯示前 2000 字元避免過大
+        diag['gas_raw_truncated'] = len(raw_body) > 2000
+        try:
+            parsed = json.loads(raw_body)
+            diag['gas_parsed'] = {
+                'success': parsed.get('success'),
+                'status': parsed.get('status'),
+                'has_data': bool(parsed.get('data')),
+                'data_keys': list(parsed.get('data', {}).keys()) if isinstance(parsed.get('data'), dict) else None,
+                'error': parsed.get('error'),
+                'message': parsed.get('message'),
+            }
+            # 明確診斷結論
+            if parsed.get('success') and parsed.get('data'):
+                diag['conclusion'] = '✅ GAS 有資料且驗證通過。問題應在後端快取 — 可呼叫 POST /api/gas-restore-force/<userId> 強制重新載入。'
+            elif parsed.get('success') and not parsed.get('data'):
+                diag['conclusion'] = '⚠️ GAS 驗證通過但此 userId 無備份資料（data 為 null）。意味著資料從未成功推送到 GAS，或 userId 拼寫/大小寫不同。'
+            elif parsed.get('error') and '身分驗證' in str(parsed.get('error', '')):
+                diag['conclusion'] = '❌ GAS 驗證失敗！請檢查：(a) Render 環境變數 GAS_SERVER_KEY (b) GAS Script Properties 的 SERVER_KEY，兩者須完全一致。'
+            else:
+                diag['conclusion'] = f'❓ GAS 回傳未預期結果：{parsed}'
+        except Exception as parse_err:
+            diag['gas_parsed'] = None
+            diag['parse_error'] = str(parse_err)
+            diag['conclusion'] = '❌ GAS 回應無法解析為 JSON。可能是 GAS_WEBHOOK_URL 指向錯誤的 URL（例如 HTML 錯誤頁）。'
+        return jsonify({'ok': True, 'diag': diag})
+    except Exception as e:
+        diag['gas_call_error'] = str(e)
+        diag['conclusion'] = f'❌ 無法連線 GAS：{e}。可能是 URL 設定錯誤或 GAS 尚未部署。'
+        return jsonify({'ok': False, 'diag': diag})
+
 # API: Save Data
 @app.route('/api/data/<user_id>', methods=['POST'])
 def save_data(user_id):
