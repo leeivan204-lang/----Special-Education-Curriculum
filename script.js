@@ -1115,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadDataAndSync() {
+        let _gasRestoreWasInProgress = false; // 宣告在 try 外，確保 catch 後仍可存取
         try {
             console.log('Starting data sync process...');
 
@@ -1128,7 +1129,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 : { success: false, error: 'timeout' };
 
             let bestRemoteData = null;
-            let _gasRestoreWasInProgress = false;
             // 若伺服器逾時（冷啟動），當作 gasRestoreInProgress 處理
             // → 顯示還原橫幅讓用戶知道仍在等待，並在 30 秒後自動重試
             if (serverResult && serverResult.error === 'timeout') {

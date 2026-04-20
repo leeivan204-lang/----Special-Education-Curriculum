@@ -745,11 +745,14 @@ def _start_gas_restore_bg(user_id, file_path):
                     if not _file_written:
                         try: os.unlink(tmp_path)
                         except: pass
-                # 通知前端資料已就緒（透過 WebSocket）
-                try:
-                    socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
-                except Exception:
-                    pass
+                # 只有在檔案確實寫入成功後才通知前端（否則前端重新載入仍是空資料）
+                if _file_written:
+                    try:
+                        socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
+                    except Exception:
+                        pass
+                else:
+                    logger.warning(f"[GAS/BG] File write failed for {user_id}, NOT emitting gas_restore_ready")
             else:
                 # pull_from_gas 回 None：可能是 GAS 確認無資料，或是 timeout
                 # _gas_empty_cache 有值代表 GAS 明確回覆無資料
