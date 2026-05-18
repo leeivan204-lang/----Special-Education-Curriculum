@@ -24,6 +24,22 @@
  * └─────────────────────────────────────────────────────┘
  */
 document.addEventListener('DOMContentLoaded', () => {
+    // --- 版本資訊 ---
+    const VERSION_NUMBER = '2026.04.21d';
+    const VERSION_DATE = 'Apr 21, 2026';  // 自動更新日期
+
+    // 初始化版本號顯示
+    function initializeVersionDisplay() {
+        const sidebarVersionEl = document.getElementById('sidebar-version');
+        if (sidebarVersionEl) {
+            sidebarVersionEl.textContent = `v${VERSION_NUMBER}`;
+            sidebarVersionEl.title = `更新日期: ${VERSION_DATE}`;  // 懸停顯示更新日期
+        }
+    }
+
+    // 初始化版本號顯示
+    initializeVersionDisplay();
+
     // 初始化簡易課表視圖結構：確保有 course-blocks-pool 和 schedule-container
     const scheduleView = document.getElementById('schedule-view');
     const courseBlocksPool = scheduleView.querySelector('.course-blocks-pool');
@@ -254,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io(SOCKET_URL);
 
     socket.on('connect', () => {
-        console.log('Connected to WebSocket server');
         if (CURRENT_USER) {
             socket.emit('join', { userId: CURRENT_USER });
             // 重新連線時恢復角色：僅當使用者是編輯者才重新取鎖
@@ -277,14 +292,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // 其他裝置已儲存 → 通知使用者
         if (data.timestamp && String(data.timestamp) !== String(LAST_SYNCED_TIMESTAMP)) {
-            console.log('Other device saved data:', data);
             showDataUpdatedBar();
         }
     });
 
     socket.on('presence_warning', (data) => {
         // 僅作通知用，角色已由登入時的身分別選擇決定，不在此更動
-        console.log('Presence warning:', data);
         showPresenceToast(data.message);
     });
 
@@ -780,7 +793,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function resetState() {
-        console.log('Resetting state for new user...');
         courses = [];
         students = [];
         teachers = [];
@@ -1181,7 +1193,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadDataAndSync() {
         let _gasRestoreWasInProgress = false; // 宣告在 try 外，確保 catch 後仍可存取
         try {
-            console.log('Starting data sync process...');
 
             // 從伺服器取得資料（逾時 10 秒，冷啟動時不無限等待）
             const _dataRaw = await fetchWithTimeout(
@@ -1224,7 +1235,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // --- B. 使用遠端資料 ---
             if (bestRemoteData) {
-                console.log('Loading remote data...');
                 importDataToMemory(bestRemoteData);
                 LAST_SYNCED_TIMESTAMP = bestRemoteData.timestamp;
                 _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
@@ -1232,7 +1242,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (!_gasRestoreWasInProgress) {
                 // --- C. 確認無遠端資料（GAS 也確認無備份）→ 全新帳號 ---
                 // 注意：GAS restore 超時時不走此路徑，避免空資料覆蓋 GAS 備份
-                console.log('Confirmed new user, no remote data.');
                 // 不自動儲存空資料，讓使用者開始輸入後再存
             } else {
                 // GAS restore 超時，不確定是否有備份 → 保持空白，不寫入任何資料
@@ -1281,7 +1290,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (_isSaving) {
             _pendingSave = true;
             if (forceOverride) _pendingSaveForce = true;
-            console.log('Save already in progress, queuing pending save');
             return;
         }
 
@@ -1344,7 +1352,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Server returned ${response.status} ${response.statusText}`);
             }
 
-            console.log('Data saved to server successfully.');
             setSaveStatus('saved');
 
             // 儲存成功：更新同步狀態
@@ -2023,7 +2030,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 這樣避免了前端無 Server Key 導致 GAS 驗證失敗的問題
             const saved = await saveAllDataToServer(true);
 
-            if (!skipConfirm) showSnackbar('✅ 資料已儲存，後端正在同步至 Google Sheet...', null, 3000);
+            if (!skipConfirm) showSnackbar('✅ 資料已備份至 Google Cloud', null, 3000);
 
             // Update Cloud Backup Timestamp
             store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
@@ -2186,7 +2193,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 4. Auto-Import from data.js (Portable Mode)
     if (window.portableData) {
-        console.log('Portable data detected:', window.portableData);
 
         const localTimestampStr = store.getRaw('lastSavedTimestamp');
         const portableTimestampStr = window.portableData.timestamp;
@@ -2195,14 +2201,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasLocalData = store.getRaw('courses') && store.get('courses', []).length > 0;
 
         if (!hasLocalData) {
-            console.log('No local data found. Auto-importing portable data...');
             restoreData(window.portableData, false);
             // Reload to ensure all variables are initialized correctly with new data
             location.reload();
         } else {
             // Compare timestamps
             if (localTimestampStr === portableTimestampStr) {
-                console.log('Portable data matches local data. Skipping import.');
             } else {
                 const localTime = new Date(localTimestampStr).getTime();
                 const portableTime = new Date(portableTimestampStr).getTime();
@@ -2989,7 +2993,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Initialize assignments for this course if not exists OR if structure is invalid
         if (!assignments[courseId]) {
-            console.log('Initializing new assignments for course:', courseId);
             assignments[courseId] = {};
             course.groups.forEach(g => assignments[courseId][g] = []);
             store.set('assignments', assignments);
@@ -3000,7 +3003,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Check for missing or invalid groups from course definition
             course.groups.forEach(g => {
                 if (!assignments[courseId][g]) {
-                    console.log('Missing group in assignments:', g);
                     assignments[courseId][g] = [];
                     needsCleanup = true;
                 } else if (!Array.isArray(assignments[courseId][g])) {
@@ -3021,7 +3023,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (needsCleanup) {
-                console.log('Cleaned up assignments structure');
                 store.set('assignments', assignments);
             }
         }
@@ -3044,11 +3045,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAssignedStudents(courseId, groupName) {
         const assignedIds = assignments[courseId][groupName] || [];
-        return assignedIds.map(studentId => {
+        console.log(`[DEBUG] renderAssignedStudents for "${groupName}":`, {
+            groupName,
+            assignedIds,
+            studentsCount: students.length,
+            firstStudentId: students[0]?.id,
+            firstStudentIdType: typeof students[0]?.id,
+            assignedIdsTypes: assignedIds.map(id => typeof id)
+        });
+        const html = assignedIds.map(studentId => {
             const student = students.find(s => s.id === studentId);
-            if (!student) return ''; // Student might have been deleted
+            console.log(`[DEBUG] Looking for studentId=${studentId} (type: ${typeof studentId}), found:`, student ? student.name : 'NOT FOUND');
+            if (!student) return '';
             return createDraggableStudentHTML(student);
         }).join('');
+        console.log(`[DEBUG] renderAssignedStudents result for "${groupName}": ${html.length} chars`);
+        return html;
     }
 
     function renderStudentPool(courseId) {
@@ -3277,7 +3289,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
 
-        const studentId = parseInt(e.dataTransfer.getData('text/plain'));
+        const studentId = Number(e.dataTransfer.getData('text/plain'));  // ✓ 改用 Number 保留小數部分
         const targetGroupName = e.currentTarget.dataset.group;
         const courseId = groupingCourseSelect ? parseInt(groupingCourseSelect.value) : null;
 
@@ -3302,6 +3314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
+        renderStudentPool(courseId);  // ✓ 重新渲染學生池，更新未分配學生列表
         renderMasterSchedule();
     }
 
@@ -3318,7 +3331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     studentPoolContainer.addEventListener('drop', (e) => {
         e.preventDefault();
         studentPoolContainer.style.backgroundColor = 'white';
-        const studentId = parseInt(e.dataTransfer.getData('text/plain'));
+        const studentId = Number(e.dataTransfer.getData('text/plain'));  // ✓ 改用 Number 保留小數部分
         const courseId = parseInt(groupingCourseSelect.value);
 
         // Remove from groups
@@ -3330,6 +3343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('assignments', assignments);
         saveAllDataToServer();
         renderGroupingWorkspace(courseId);
+        renderStudentPool(courseId);  // ✓ 重新渲染學生池
         renderMasterSchedule();
     });
 
