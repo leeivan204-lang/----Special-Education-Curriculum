@@ -27,10 +27,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if running in test environment
     const isTestEnvironment = typeof global !== 'undefined' && global.__IS_TEST__;
 
+    // --- Declare state variables early (before test object creation) ---
+    let courses = [];
+    let students = [];
+    let teachers = [];
+    let assignments = {};
+    let scheduleData = {};
+    let teacherPartTimeMarks = {};
+    let scheduleTitle = {};
+    let timeSlotOverrides = {};
+
     // Create test exports early if in test mode
     if (isTestEnvironment && typeof window !== 'undefined') {
-        // Define __TEST__ object with getters for all functions
-        // Functions will be defined later in the callback and accessed via getters
+        // Define __TEST__ object with direct references to state variables
         window.__TEST__ = {
             // Expose functions via getters (will be defined later in the callback)
             get handleSaveCourse() { return typeof handleSaveCourse !== 'undefined' ? handleSaveCourse : null; },
@@ -45,11 +54,10 @@ document.addEventListener('DOMContentLoaded', () => {
             get deleteCourse() { return typeof window.deleteCourse !== 'undefined' ? window.deleteCourse : null; },
             get deleteStudent() { return typeof window.deleteStudent !== 'undefined' ? window.deleteStudent : null; },
             get deleteTeacher() { return typeof window.deleteTeacher !== 'undefined' ? window.deleteTeacher : null; },
-            // Expose state variables
-            get courses() { return typeof courses !== 'undefined' ? courses : []; },
-            set courses(val) { if (typeof courses !== 'undefined') courses = val; },
-            get students() { return typeof students !== 'undefined' ? students : []; },
-            set students(val) { if (typeof students !== 'undefined') students = val; },
+            // Expose state variables (direct references, not getters)
+            courses,
+            students,
+            teachers,
         };
     }
 
@@ -1621,14 +1629,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderMasterSchedule();
     }
 
-    // --- State Management ---
-    let courses = store.get('courses', []);
-    let students = store.get('students', []);
-    let teachers = store.get('teachers', []);
-    let assignments = store.get('assignments', {}); // { courseId: { groupName: [studentId, ...] } }
-    let scheduleData = store.get('scheduleData', {}); // { 'monday-1': { courseId, groupName, blockIndex }, ... }
-    let teacherPartTimeMarks = store.get('teacherPartTimeMarks', {}); // { teacherName: { 'monday-1': true, ... } }
-    let scheduleTitle = store.get('scheduleTitle', {
+    // --- State Management: Load from storage ---
+    courses = store.get('courses', []);
+    students = store.get('students', []);
+    teachers = store.get('teachers', []);
+    assignments = store.get('assignments', {}); // { courseId: { groupName: [studentId, ...] } }
+    scheduleData = store.get('scheduleData', {}); // { 'monday-1': { courseId, groupName, blockIndex }, ... }
+    teacherPartTimeMarks = store.get('teacherPartTimeMarks', {}); // { teacherName: { 'monday-1': true, ... } }
+    scheduleTitle = store.get('scheduleTitle', {
         prefix: '',
         year: '',
         semester: '',
