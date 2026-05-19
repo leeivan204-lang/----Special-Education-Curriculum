@@ -24,38 +24,70 @@
  * └─────────────────────────────────────────────────────┘
  */
 document.addEventListener('DOMContentLoaded', () => {
-    // --- 版本資訊 ---
-    const VERSION_NUMBER = '2026.05.19d';
-    const VERSION_DATE = 'Apr 21, 2026';  // 自動更新日期
+    // Check if running in test environment
+    const isTestEnvironment = typeof global !== 'undefined' && global.__IS_TEST__;
 
-    // 初始化版本號顯示
-    function initializeVersionDisplay() {
-        const sidebarVersionEl = document.getElementById('sidebar-version');
-        if (sidebarVersionEl) {
-            sidebarVersionEl.textContent = `v${VERSION_NUMBER}`;
-            sidebarVersionEl.title = `更新日期: ${VERSION_DATE}`;  // 懸停顯示更新日期
-        }
+    // Create test exports early if in test mode
+    if (isTestEnvironment && typeof window !== 'undefined') {
+        // Define __TEST__ object with getters for all functions
+        // Functions will be defined later in the callback and accessed via getters
+        window.__TEST__ = {
+            // Expose functions via getters (will be defined later in the callback)
+            get handleSaveCourse() { return typeof handleSaveCourse !== 'undefined' ? handleSaveCourse : null; },
+            get handleSaveStudent() { return typeof handleSaveStudent !== 'undefined' ? handleSaveStudent : null; },
+            get handleSaveTeacher() { return typeof handleSaveTeacher !== 'undefined' ? handleSaveTeacher : null; },
+            get openAddCourseModal() { return typeof openAddCourseModal !== 'undefined' ? openAddCourseModal : null; },
+            get openAddStudentModal() { return typeof openAddStudentModal !== 'undefined' ? openAddStudentModal : null; },
+            get openAddTeacherModal() { return typeof openAddTeacherModal !== 'undefined' ? openAddTeacherModal : null; },
+            get renderCourseList() { return typeof renderCourseList !== 'undefined' ? renderCourseList : null; },
+            get renderStudentList() { return typeof renderStudentList !== 'undefined' ? renderStudentList : null; },
+            get renderTeacherList() { return typeof renderTeacherList !== 'undefined' ? renderTeacherList : null; },
+            get deleteCourse() { return typeof window.deleteCourse !== 'undefined' ? window.deleteCourse : null; },
+            get deleteStudent() { return typeof window.deleteStudent !== 'undefined' ? window.deleteStudent : null; },
+            get deleteTeacher() { return typeof window.deleteTeacher !== 'undefined' ? window.deleteTeacher : null; },
+            // Expose state variables
+            get courses() { return typeof courses !== 'undefined' ? courses : []; },
+            set courses(val) { if (typeof courses !== 'undefined') courses = val; },
+            get students() { return typeof students !== 'undefined' ? students : []; },
+            set students(val) { if (typeof students !== 'undefined') students = val; },
+        };
     }
 
-    // 初始化版本號顯示
-    initializeVersionDisplay();
+    // Only initialize DOM in production/browser environment
+    if (!isTestEnvironment) {
+        // --- 版本資訊 ---
+        const VERSION_NUMBER = '2026.05.19d';
+        const VERSION_DATE = 'Apr 21, 2026';  // 自動更新日期
 
-    // 初始化簡易課表視圖結構：確保有 course-blocks-pool 和 schedule-container
-    const scheduleView = document.getElementById('schedule-view');
-    const courseBlocksPool = scheduleView.querySelector('.course-blocks-pool');
-    const scheduleContainer = scheduleView.querySelector('.schedule-container');
+        // 初始化版本號顯示
+        function initializeVersionDisplay() {
+            const sidebarVersionEl = document.getElementById('sidebar-version');
+            if (sidebarVersionEl) {
+                sidebarVersionEl.textContent = `v${VERSION_NUMBER}`;
+                sidebarVersionEl.title = `更新日期: ${VERSION_DATE}`;  // 懸停顯示更新日期
+            }
+        }
 
-    if (courseBlocksPool && scheduleContainer) {
-        // 創建一個包裝容器
-        const wrapper = document.createElement('div');
-        wrapper.className = 'schedule-with-pool';
+        // 初始化版本號顯示
+        initializeVersionDisplay();
 
-        // 將 scheduleContainer 插入到包裝容器中
-        scheduleContainer.parentNode.insertBefore(wrapper, scheduleContainer);
+        // 初始化簡易課表視圖結構：確保有 course-blocks-pool 和 schedule-container
+        const scheduleView = document.getElementById('schedule-view');
+        const courseBlocksPool = scheduleView.querySelector('.course-blocks-pool');
+        const scheduleContainer = scheduleView.querySelector('.schedule-container');
 
-        // 將 courseBlocksPool 移動到包裝容器中（左側）
-        wrapper.appendChild(courseBlocksPool);
-        wrapper.appendChild(scheduleContainer);
+        if (courseBlocksPool && scheduleContainer) {
+            // 創建一個包裝容器
+            const wrapper = document.createElement('div');
+            wrapper.className = 'schedule-with-pool';
+
+            // 將 scheduleContainer 插入到包裝容器中
+            scheduleContainer.parentNode.insertBefore(wrapper, scheduleContainer);
+
+            // 將 courseBlocksPool 移動到包裝容器中（左側）
+            wrapper.appendChild(courseBlocksPool);
+            wrapper.appendChild(scheduleContainer);
+        }
     }
 
     // --- Google OAuth 設定 ---
@@ -6311,10 +6343,11 @@ document.addEventListener('DOMContentLoaded', () => {
             renderMasterSchedule,
             renderCourseBlocks,
             handleScheduleDrop,
-            deleteCourse: window.deleteCourse, // These are attached to window
-            deleteStudent: window.deleteStudent,
-            deleteTeacher: window.deleteTeacher,
-            removeFromSchedule: window.removeFromSchedule
+            // Use getters to safely access window functions that may not be defined yet
+            get deleteCourse() { return window.deleteCourse; },
+            get deleteStudent() { return window.deleteStudent; },
+            get deleteTeacher() { return window.deleteTeacher; },
+            get removeFromSchedule() { return window.removeFromSchedule; }
         };
     }
 });

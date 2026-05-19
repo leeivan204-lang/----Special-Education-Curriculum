@@ -2,6 +2,9 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
+// --- Mark as Test Environment ---
+global.__IS_TEST__ = true;  // Signal to script.js that we're in a test environment
+
 // --- Mock Browser Environment ---
 global.window = global;
 
@@ -22,61 +25,6 @@ global.window.location = {
     hostname: 'localhost'
 };
 global.self = global;
-
-// Mock document object
-class MockElement {
-    constructor(id = '', tag = 'div') {
-        this.id = id;
-        this.tagName = tag.toUpperCase();
-        this.className = '';
-        this.style = {};
-        this.innerHTML = '';
-        this.value = '';
-        this.textContent = '';
-        this.checked = false;
-        this.disabled = false;
-        this.children = [];
-        this.parentElement = null;
-        this.offsetHeight = 100;
-        this.offsetWidth = 100;
-    }
-
-    addEventListener() {}
-    removeEventListener() {}
-    appendChild() { return this; }
-    removeChild() { return this; }
-    insertBefore() { return this; }
-    getAttribute() { return null; }
-    setAttribute() {}
-    removeAttribute() {}
-    querySelector() { return new MockElement(); }
-    querySelectorAll() { return []; }
-    getElementById() { return new MockElement(); }
-    getContext() { return { fillRect: () => {}, clearRect: () => {} }; }
-    classList = { add: () => {}, remove: () => {}, contains: () => false, toggle: () => {} };
-}
-
-const mockElements = {};
-
-global.document = {
-    getElementById: (id) => mockElements[id] || new MockElement(id),
-    createElement: (tag) => new MockElement('', tag),
-    querySelector: () => new MockElement(),
-    querySelectorAll: () => [],
-    addEventListener: (event, callback) => {
-        if (event === 'DOMContentLoaded') {
-            global._domContentLoadedCallback = callback;
-        }
-        if (!eventListeners[event]) {
-            eventListeners[event] = [];
-        }
-        eventListeners[event].push(callback);
-    },
-    removeEventListener: () => {},
-    body: new MockElement(),
-    head: new MockElement(),
-    documentElement: new MockElement()
-};
 
 // Mock LocalStorage
 const localStorageMock = (() => {
@@ -111,6 +59,7 @@ global.fetch = async () => ({
 // Mock Elements Registry (to store elements created by createElement or retrieved by getElementById)
 const elements = {};
 
+// MockElement class definition
 class MockElement {
     constructor(id = '', tag = 'div') {
         this.id = id;
@@ -189,7 +138,11 @@ class MockElement {
 // Mock Document
 global.document = {
     addEventListener: (event, callback) => {
-        if (event === 'DOMContentLoaded') global._domContentLoadedCallback = callback;
+        console.log(`[DEBUG] document.addEventListener called with event: '${event}'`);
+        if (event === 'DOMContentLoaded') {
+            console.log('[DEBUG] Registering DOMContentLoaded callback');
+            global._domContentLoadedCallback = callback;
+        }
     },
     getElementById: (id) => {
         if (!elements[id]) elements[id] = new MockElement(id);
@@ -231,23 +184,68 @@ const scriptPath = path.join(__dirname, '../script.js');
 const scriptContent = fs.readFileSync(scriptPath, 'utf8');
 
 console.log("Loading script.js...");
+// First, test that window is accessible in vm context
+console.log('[DEBUG] Testing vm.runInThisContext window access...');
 try {
-    const modifiedScriptContent = scriptContent.replace(
+    vm.runInThisContext('console.log("[DEBUG VM] typeof window:", typeof window);');
+} catch (e) {
+    console.error('[DEBUG VM] Error checking typeof window:', e.message);
+}
+
+try {
+    let modifiedScriptContent = scriptContent.replace(
         /const GAS_API_URL = .*;/,
         "const GAS_API_URL = 'http://mock-gas';"
     );
+
+    // Inject logging at multiple points to trace execution
+    modifiedScriptContent = modifiedScriptContent.replace(
+        /document\.addEventListener\('DOMContentLoaded', \(\) => \{/,
+        `document.addEventListener('DOMContentLoaded', () => {
+    console.log('[1] Callback START');`
+    );
+
+    modifiedScriptContent = modifiedScriptContent.replace(
+        /const isTestEnvironment = typeof global/,
+        `console.log('[2] About to set isTestEnvironment');
+    const isTestEnvironment = typeof global`
+    );
+
+    modifiedScriptContent = modifiedScriptContent.replace(
+        /if \(!isTestEnvironment\) \{/,
+        `console.log('[3] About to check isTestEnvironment, value:', isTestEnvironment);
+    if (!isTestEnvironment) {
+        console.log('[3.1] Inside if (!isTestEnvironment)');`
+    );
+
+    modifiedScriptContent = modifiedScriptContent.replace(
+        /\/\/ --- Expose for Testing ---/,
+        `console.log('[4] About to expose for testing');
+    // --- Expose for Testing ---`
+    );
+
     vm.runInThisContext(modifiedScriptContent);
 } catch (e) {
     console.error("Error loading script.js:", e);
+    console.error("Stack:", e.stack);
     process.exit(1);
 }
+
+// Check if window is properly set up
+console.log('[DEBUG] Checking window setup...');
+console.log('[DEBUG] typeof window:', typeof (typeof global !== 'undefined' ? global.window : undefined));
+console.log('[DEBUG] window === global:', global.window === global);
+console.log('[DEBUG] window:', global.window ? 'defined' : 'undefined');
 
 // Run DOMContentLoaded
 if (global._domContentLoadedCallback) {
     try {
+        console.log('[DEBUG] Calling DOMContentLoaded callback...');
         global._domContentLoadedCallback();
+        console.log('[DEBUG] DOMContentLoaded callback completed');
     } catch (e) {
-        console.error("Error running DOMContentLoaded callback:", e);
+        console.error("[ERROR] Exception in DOMContentLoaded callback:", e);
+        console.error("[ERROR] Stack:", e.stack);
         process.exit(1);
     }
 } else {
@@ -256,10 +254,15 @@ if (global._domContentLoadedCallback) {
 }
 
 // Verify window.__TEST__ exists and has required properties
+console.log('[DEBUG] Checking for window.__TEST__...');
+console.log('[DEBUG] window === global:', global.window === global);
+console.log('[DEBUG] typeof window.__TEST__:', typeof global.window.__TEST__);
 if (!global.window.__TEST__) {
     console.error("❌ window.__TEST__ not created!");
-    console.error("Available on window:", Object.keys(global.window).slice(0, 10));
+    console.error("Available on window:", Object.keys(global.window).slice(0, 15));
     process.exit(1);
+} else {
+    console.log('[DEBUG] ✓ window.__TEST__ found!');
 }
 
 // Test Helpers
