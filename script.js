@@ -2027,24 +2027,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btnLogout.addEventListener('click', handleLogout);
     }
 
-    async function handleLogout() {
-        // 詢問用戶是否備份
-            const success = await backupToCloud(true); // true = skip duplicate confirm
-            if (success) {
-                showSnackbar('備份成功，即將登出...');
-                setTimeout(doLogout, 1500);
-            } else {
-                // 備份失敗
-                if (confirm('備份失敗，仍要強制登出嗎？')) {
-                    doLogout();
-                }
-            }
-        } else {
-            // 用戶選擇不備份，直接登出
-            doLogout();
-        }
-    }
-
     function doLogout() {
         // 清除 Google OAuth 狀態
         if (isGoogleOAuthEnabled() && typeof google !== 'undefined' && google.accounts) {
@@ -6331,3 +6313,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+
+    async function handleLogout() {
+        const confirmed = confirm('確定要登出嗎？\n\n提醒：請記得定期使用「匯出資料」功能來備份您的課表');
+        if (confirmed) {
+            showSnackbar('感謝使用！祝您教學順利', null, 2000);
+            setTimeout(doLogout, 2000);
+        }
+    }
