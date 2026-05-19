@@ -2,6 +2,9 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
+// --- Mark as Test Environment ---
+global.__IS_TEST__ = true;  // Signal to script.js that we're in a test environment
+
 // --- Mock Browser Environment ---
 global.window = global;
 global.window.addEventListener = (event, callback) => {

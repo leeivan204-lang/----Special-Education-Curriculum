@@ -37,29 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let scheduleTitle = {};
     let timeSlotOverrides = {};
 
-    // Create test exports early if in test mode
-    if (isTestEnvironment && typeof window !== 'undefined') {
-        // Define __TEST__ object with direct references to state variables
-        window.__TEST__ = {
-            // Expose functions via getters (will be defined later in the callback)
-            get handleSaveCourse() { return typeof handleSaveCourse !== 'undefined' ? handleSaveCourse : null; },
-            get handleSaveStudent() { return typeof handleSaveStudent !== 'undefined' ? handleSaveStudent : null; },
-            get handleSaveTeacher() { return typeof handleSaveTeacher !== 'undefined' ? handleSaveTeacher : null; },
-            get openAddCourseModal() { return typeof openAddCourseModal !== 'undefined' ? openAddCourseModal : null; },
-            get openAddStudentModal() { return typeof openAddStudentModal !== 'undefined' ? openAddStudentModal : null; },
-            get openAddTeacherModal() { return typeof openAddTeacherModal !== 'undefined' ? openAddTeacherModal : null; },
-            get renderCourseList() { return typeof renderCourseList !== 'undefined' ? renderCourseList : null; },
-            get renderStudentList() { return typeof renderStudentList !== 'undefined' ? renderStudentList : null; },
-            get renderTeacherList() { return typeof renderTeacherList !== 'undefined' ? renderTeacherList : null; },
-            get deleteCourse() { return typeof window.deleteCourse !== 'undefined' ? window.deleteCourse : null; },
-            get deleteStudent() { return typeof window.deleteStudent !== 'undefined' ? window.deleteStudent : null; },
-            get deleteTeacher() { return typeof window.deleteTeacher !== 'undefined' ? window.deleteTeacher : null; },
-            // Expose state variables (direct references, not getters)
-            courses,
-            students,
-            teachers,
-        };
-    }
+    // Note: window.__TEST__ is defined later at the end of the callback
+    // when all functions are fully defined (around line 6331)
 
     // Only initialize DOM in production/browser environment
     if (!isTestEnvironment) {
@@ -96,6 +75,55 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.appendChild(courseBlocksPool);
             wrapper.appendChild(scheduleContainer);
         }
+    }
+
+    // --- Expose for Testing (outside isTestEnvironment block) ---
+    if (typeof window !== 'undefined') {
+        window.__TEST__ = {
+            // Utility functions via getters (will be defined later)
+            get sanitizeScheduleData() { return typeof sanitizeScheduleData !== 'undefined' ? sanitizeScheduleData : null; },
+            get parseTimestamp() { return typeof parseTimestamp !== 'undefined' ? parseTimestamp : null; },
+            get syncLocalStorage() { return typeof syncLocalStorage !== 'undefined' ? syncLocalStorage : null; },
+            get restoreData() { return typeof restoreData !== 'undefined' ? restoreData : null; },
+            get loadDataAndSync() { return typeof loadDataAndSync !== 'undefined' ? loadDataAndSync : null; },
+            get saveAllDataToServer() { return typeof saveAllDataToServer !== 'undefined' ? saveAllDataToServer : null; },
+            get saveToCustomServer() { return typeof saveToCustomServer !== 'undefined' ? saveToCustomServer : null; },
+            get importDataToMemory() { return typeof importDataToMemory !== 'undefined' ? importDataToMemory : null; },
+            // Expose state variables via direct references and getters/setters
+            get scheduleData() { return scheduleData; },
+            get courses() { return courses; },
+            set courses(val) { courses = val; },
+            get students() { return students; },
+            set students(val) { students = val; },
+            get CURRENT_USER() { return typeof CURRENT_USER !== 'undefined' ? CURRENT_USER : null; },
+            set CURRENT_USER(val) { if (typeof CURRENT_USER !== 'undefined') CURRENT_USER = val; },
+            get LAST_SYNCED_TIMESTAMP() { return typeof LAST_SYNCED_TIMESTAMP !== 'undefined' ? LAST_SYNCED_TIMESTAMP : 0; },
+            set LAST_SYNCED_TIMESTAMP(val) { if (typeof LAST_SYNCED_TIMESTAMP !== 'undefined') LAST_SYNCED_TIMESTAMP = val; },
+            get teachers() { return teachers; },
+            set teachers(val) { teachers = val; },
+            get assignments() { return assignments; },
+            set assignments(val) { assignments = val; },
+            // Exposed Functions for Testing via getters
+            get handleSaveCourse() { return typeof handleSaveCourse !== 'undefined' ? handleSaveCourse : null; },
+            get handleSaveStudent() { return typeof handleSaveStudent !== 'undefined' ? handleSaveStudent : null; },
+            get handleSaveTeacher() { return typeof handleSaveTeacher !== 'undefined' ? handleSaveTeacher : null; },
+            get openAddCourseModal() { return typeof openAddCourseModal !== 'undefined' ? openAddCourseModal : null; },
+            get openAddStudentModal() { return typeof openAddStudentModal !== 'undefined' ? openAddStudentModal : null; },
+            get openAddTeacherModal() { return typeof openAddTeacherModal !== 'undefined' ? openAddTeacherModal : null; },
+            get renderCourseList() { return typeof renderCourseList !== 'undefined' ? renderCourseList : null; },
+            get renderStudentList() { return typeof renderStudentList !== 'undefined' ? renderStudentList : null; },
+            get renderTeacherList() { return typeof renderTeacherList !== 'undefined' ? renderTeacherList : null; },
+            get renderGroupingWorkspace() { return typeof renderGroupingWorkspace !== 'undefined' ? renderGroupingWorkspace : null; },
+            get renderAllGroupsOverview() { return typeof renderAllGroupsOverview !== 'undefined' ? renderAllGroupsOverview : null; },
+            get handleZoneDrop() { return typeof handleZoneDrop !== 'undefined' ? handleZoneDrop : null; },
+            get renderMasterSchedule() { return typeof renderMasterSchedule !== 'undefined' ? renderMasterSchedule : null; },
+            get renderCourseBlocks() { return typeof renderCourseBlocks !== 'undefined' ? renderCourseBlocks : null; },
+            get handleScheduleDrop() { return typeof handleScheduleDrop !== 'undefined' ? handleScheduleDrop : null; },
+            get deleteCourse() { return typeof window.deleteCourse !== 'undefined' ? window.deleteCourse : null; },
+            get deleteStudent() { return typeof window.deleteStudent !== 'undefined' ? window.deleteStudent : null; },
+            get deleteTeacher() { return typeof window.deleteTeacher !== 'undefined' ? window.deleteTeacher : null; },
+            get removeFromSchedule() { return typeof removeFromSchedule !== 'undefined' ? removeFromSchedule : null; }
+        };
     }
 
     // --- Google OAuth 設定 ---
@@ -6310,53 +6338,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const day = String(now.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
     }
-    // --- Expose for Testing ---
-    if (typeof window !== 'undefined') {
-        window.__TEST__ = {
-            sanitizeScheduleData,
-            parseTimestamp,
-            syncLocalStorage,
-            restoreData,
-            loadDataAndSync,
-            saveAllDataToServer,
-            saveToCustomServer,
-            importDataToMemory,
-            // Expose state variables via getters/setters if needed, or object references
-            get scheduleData() { return scheduleData; },
-            get courses() { return courses; },
-            set courses(val) { courses = val; },
-            get students() { return students; },
-            set students(val) { students = val; },
-            get CURRENT_USER() { return CURRENT_USER; },
-            set CURRENT_USER(val) { CURRENT_USER = val; },
-            get LAST_SYNCED_TIMESTAMP() { return LAST_SYNCED_TIMESTAMP; },
-            set LAST_SYNCED_TIMESTAMP(val) { LAST_SYNCED_TIMESTAMP = val; },
-            get teachers() { return teachers; },
-            set teachers(val) { teachers = val; },
-            get assignments() { return assignments; },
-            set assignments(val) { assignments = val; },
-            // Exposed Functions for Testing
-            handleSaveCourse,
-            handleSaveStudent,
-            handleSaveTeacher,
-            openAddCourseModal,
-            openAddStudentModal,
-            openAddTeacherModal,
-            renderCourseList,
-            renderStudentList,
-            renderTeacherList,
-            renderGroupingWorkspace,
-            renderAllGroupsOverview,
-            handleZoneDrop,
-            renderMasterSchedule,
-            renderCourseBlocks,
-            handleScheduleDrop,
-            // Use getters to safely access window functions that may not be defined yet
-            get deleteCourse() { return window.deleteCourse; },
-            get deleteStudent() { return window.deleteStudent; },
-            get deleteTeacher() { return window.deleteTeacher; },
-            get removeFromSchedule() { return window.removeFromSchedule; }
-        };
+
+    // --- Update window.__TEST__ with all defined functions (for test environment) ---
+    if (typeof window !== 'undefined' && window.__TEST__) {
+        // Override getters with actual function references
+        window.__TEST__.sanitizeScheduleData = sanitizeScheduleData;
+        window.__TEST__.parseTimestamp = parseTimestamp;
+        window.__TEST__.syncLocalStorage = syncLocalStorage;
+        window.__TEST__.restoreData = restoreData;
+        window.__TEST__.loadDataAndSync = loadDataAndSync;
+        window.__TEST__.saveAllDataToServer = saveAllDataToServer;
+        window.__TEST__.saveToCustomServer = saveToCustomServer;
+        window.__TEST__.importDataToMemory = importDataToMemory;
+        window.__TEST__.handleSaveCourse = handleSaveCourse;
+        window.__TEST__.handleSaveStudent = handleSaveStudent;
+        window.__TEST__.handleSaveTeacher = handleSaveTeacher;
+        window.__TEST__.openAddCourseModal = openAddCourseModal;
+        window.__TEST__.openAddStudentModal = openAddStudentModal;
+        window.__TEST__.openAddTeacherModal = openAddTeacherModal;
+        window.__TEST__.renderCourseList = renderCourseList;
+        window.__TEST__.renderStudentList = renderStudentList;
+        window.__TEST__.renderTeacherList = renderTeacherList;
+        window.__TEST__.renderGroupingWorkspace = renderGroupingWorkspace;
+        window.__TEST__.renderAllGroupsOverview = renderAllGroupsOverview;
+        window.__TEST__.handleZoneDrop = handleZoneDrop;
+        window.__TEST__.renderMasterSchedule = renderMasterSchedule;
+        window.__TEST__.renderCourseBlocks = renderCourseBlocks;
+        window.__TEST__.handleScheduleDrop = handleScheduleDrop;
+        if (typeof removeCourseBlock !== 'undefined') window.__TEST__.removeCourseBlock = removeCourseBlock;
+        if (typeof window.removeFromSchedule !== 'undefined') window.__TEST__.removeFromSchedule = window.removeFromSchedule;
     }
 });
 
