@@ -1913,7 +1913,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentGroupingCourseId = null; // Track currently selected course
     const btnClearAssignments = document.getElementById('btn-clear-assignments');
 
-    if (groupingCourseSelect) {
+    if (groupingCourseSelect && groupingWorkspace) {
         groupingCourseSelect.addEventListener('change', (e) => {
             const courseId = e.target.value;
             currentGroupingCourseId = courseId ? parseInt(courseId) : null;
@@ -1921,7 +1921,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (courseId) {
                 // Hide overview, show single course workspace
                 document.getElementById('all-groups-overview').style.display = 'none';
-                groupingEmptyState.style.display = 'none';
+                if (groupingEmptyState) groupingEmptyState.style.display = 'none';
                 renderGroupingWorkspace(parseInt(courseId));
 
                 // Show clear button
@@ -1929,7 +1929,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     btnClearAssignments.style.display = 'flex';
                 }
             } else {
-                groupingWorkspace.style.display = 'none';
+                if (groupingWorkspace) groupingWorkspace.style.display = 'none';
                 document.getElementById('all-groups-overview').style.display = 'none';
                 groupingEmptyState.style.display = 'block';
 
@@ -2963,8 +2963,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const course = courses.find(c => c.id === courseId);
         if (!course) return;
 
-        groupingWorkspace.style.display = 'flex';
-        groupingEmptyState.style.display = 'none';
+        // Get DOM elements dynamically to support test environment
+        const workspace = typeof groupingWorkspace !== 'undefined' ? groupingWorkspace : document.getElementById('grouping-workspace');
+        const emptyState = typeof groupingEmptyState !== 'undefined' ? groupingEmptyState : document.getElementById('grouping-empty-state');
+
+        if (workspace) workspace.style.display = 'flex';
+        if (emptyState) emptyState.style.display = 'none';
 
         // Initialize assignments for this course if not exists OR if structure is invalid
         if (!assignments[courseId]) {
