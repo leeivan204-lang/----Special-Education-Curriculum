@@ -2840,6 +2840,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.deleteTeacher = function (id) {
         const teacher = teachers.find(t => t.id === id);
         if (!teacher) return;
+        
+        if (!confirm(`確定要刪除教師「${teacher.name}」嗎？此操作無法復原。`)) return;
 
         // Save snapshot for undo
         const deletedTeacher = JSON.parse(JSON.stringify(teacher));
@@ -3299,6 +3301,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.deleteCourse = function (id) {
         const course = courses.find(c => c.id === id);
         if (!course) return;
+        
+        if (!confirm(`確定要刪除課程「${course.name}」嗎？此操作無法復原。`)) return;
 
         // Save snapshot for undo
         const deletedCourse = JSON.parse(JSON.stringify(course));
@@ -3337,6 +3341,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.deleteStudent = function (id) {
         const student = students.find(s => s.id === id);
         if (!student) return;
+        
+        if (!confirm(`確定要刪除學生「${student.name}」嗎？此操作無法復原。`)) return;
 
         // Save snapshot for undo（含原始位置，undo 後能插回原處）
         const deletedStudent = JSON.parse(JSON.stringify(student));
