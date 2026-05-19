@@ -5,7 +5,7 @@ import shutil
 import time
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import app, socketio, DATA_DIR
+from app import app, socketio, DATA_DIR, _cache_invalidate
 
 class TestBackendAPI(unittest.TestCase):
 
@@ -19,10 +19,11 @@ class TestBackendAPI(unittest.TestCase):
         self.socketio = socketio.test_client(app, flask_test_client=self.app)
         self.test_user_id = "test_user_api"
 
-        # Clean up data dir before test
+        # Clean up data dir and cache before test
         self.data_path = os.path.join(DATA_DIR, f"{self.test_user_id}.json")
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
+        _cache_invalidate(self.test_user_id)  # Clear cache to prevent test pollution
 
     def _post_json(self, url, data):
         """Helper: POST JSON with CSRF header"""
@@ -34,6 +35,7 @@ class TestBackendAPI(unittest.TestCase):
             self.socketio.disconnect()
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
+        _cache_invalidate(self.test_user_id)  # Clear cache after test
 
     def test_login(self):
         """測試登入 API"""

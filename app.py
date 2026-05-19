@@ -550,11 +550,9 @@ def _check_rate_limit():
     return False
 
 # --- Google Apps Script (GAS) 雲端備份 ---
-# 可透過環境變數 GAS_WEBHOOK_URL 覆蓋；預設使用專案已配置的 Sheet
-GAS_WEBHOOK_URL = os.environ.get(
-    'GAS_WEBHOOK_URL',
-    'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec'
-)
+# Phase 2: GAS support has been removed. GAS_WEBHOOK_URL must be explicitly set via environment variable.
+# 可透過環境變數 GAS_WEBHOOK_URL 設定；預設為空（禁用 GAS）
+GAS_WEBHOOK_URL = os.environ.get('GAS_WEBHOOK_URL', '')
 GAS_ENABLED = bool(GAS_WEBHOOK_URL)
 
 # Google Apps Script 會擋下看起來像爬蟲的 User-Agent（Python-urllib/*）→ 回 401 Unauthorized
@@ -955,6 +953,9 @@ def save_data(user_id):
     file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
     
     try:
+        # Apply schema migration to new data
+        new_data = migrate_data(new_data)
+
         # Check for conflicts if not forcing
         if not force_save and os.path.exists(file_path):
             # 優先從快取讀取現有資料（減少磁碟 I/O）
@@ -962,10 +963,11 @@ def save_data(user_id):
             if existing_file_content is None:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     existing_file_content = json.load(f)
-            
+            existing_file_content = migrate_data(existing_file_content)  # Apply migration to existing data
+
             # Extract timestamp from existing data
             existing_timestamp = existing_file_content.get('timestamp')
-            
+
             # 統一轉為整數（毫秒）比對，避免格式差異造成誤判
             try:
                 ts_server = int(existing_timestamp)
@@ -977,7 +979,7 @@ def save_data(user_id):
             if ts_server != ts_client:
                 logger.warning(f"Conflict detected for {user_id}. Server: {existing_timestamp}, Client saw: {client_timestamp}")
                 return jsonify({
-                    'success': False, 
+                    'success': False,
                     'message': 'Data conflict detected. Please reload.',
                     'serverData': existing_file_content
                 }), 409
@@ -1013,9 +1015,10 @@ def save_data(user_id):
             logger.warning(f"Socket emit failed: {e}")
 
         # 背景自動備份到 Google Sheets（非阻塞）
-        push_to_gas_async(user_id, new_data)
+        if GAS_ENABLED:
+            push_to_gas_async(user_id, new_data)
 
-        return jsonify({'success': True, 'message': 'Data saved successfully'})
+        return jsonify({'success': True, 'message': 'Data saved successfully', 'data': new_data})
     except Exception as e:
         logger.error(f"Error writing data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
