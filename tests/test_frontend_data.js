@@ -4,7 +4,19 @@ const path = require('path');
 
 // --- Mock Browser Environment ---
 global.window = global;
-global.window.addEventListener = () => { };
+
+// Properly mock addEventListener to capture DOMContentLoaded callback
+const eventListeners = {};
+global.window.addEventListener = (event, callback) => {
+    if (event === 'DOMContentLoaded') {
+        global._domContentLoadedCallback = callback;
+    }
+    if (!eventListeners[event]) {
+        eventListeners[event] = [];
+    }
+    eventListeners[event].push(callback);
+};
+
 global.window.location = {
     protocol: 'http:',
     hostname: 'localhost'
