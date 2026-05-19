@@ -25,7 +25,7 @@
  */
 document.addEventListener('DOMContentLoaded', () => {
     // --- 版本資訊 ---
-    const VERSION_NUMBER = '2026.04.21d';
+    const VERSION_NUMBER = '2026.05.19d';
     const VERSION_DATE = 'Apr 21, 2026';  // 自動更新日期
 
     // 初始化版本號顯示
