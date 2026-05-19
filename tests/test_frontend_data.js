@@ -189,13 +189,32 @@ try {
 
 // Run DOMContentLoaded
 if (global._domContentLoadedCallback) {
-    global._domContentLoadedCallback();
+    try {
+        global._domContentLoadedCallback();
+    } catch (e) {
+        console.error("Error running DOMContentLoaded callback:", e);
+        process.exit(1);
+    }
 } else {
     console.error("DOMContentLoaded callback not registered!");
     process.exit(1);
 }
 
+// Verify window.__TEST__ exists and has required properties
+if (!global.window.__TEST__) {
+    console.error("❌ window.__TEST__ not created!");
+    console.error("Available on window:", Object.keys(global.window).slice(0, 10));
+    process.exit(1);
+}
+
 // Test Helpers
+const testExports = global.window.__TEST__;
+if (!testExports.handleSaveCourse) {
+    console.error("❌ handleSaveCourse not found in window.__TEST__");
+    console.error("Available exports:", Object.keys(testExports).slice(0, 20));
+    process.exit(1);
+}
+
 const {
     handleSaveCourse,
     handleSaveStudent,
@@ -211,7 +230,7 @@ const {
     deleteTeacher,
     courses,
     students,
-} = global.window.__TEST__;
+} = testExports;
 
 let passed = 0;
 let failed = 0;
