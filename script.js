@@ -59,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Google OAuth 設定 ---
-    // 【部署前必填】將下方 'YOUR_GOOGLE_CLIENT_ID' 替換為 Google Cloud Console 的 OAuth 2.0 Client ID
     // 格式範例：'123456789-abcdefg.apps.googleusercontent.com'
     // 若留空或保持預設值，Google OAuth 功能將被停用（本機 Flask 模式可正常使用）
     const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
@@ -80,7 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Google GSI callback（必須掛在 window 上）
     window.handleGoogleCredential = function(response) {
         googleIdToken = response.credential;
-        // 解析 JWT payload（不驗簽，僅取 exp 與 email 用於 UI 顯示；真正驗證在 GAS 端）
         try {
             const b64 = response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
             const payload = JSON.parse(atob(b64));
@@ -301,31 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showPresenceToast(data.message);
     });
 
-    // GAS 背景還原完成通知 → 自動重載資料
-    socket.on('gas_restore_ready', async (data) => {
-        const timestamp = new Date().toLocaleTimeString();
-        console.log(`[GAS] 【${timestamp}】Background restore ready:`, data);
-        console.log(`[GAS] mainAppSection exists: ${!!mainAppSection}, display: ${mainAppSection?.style?.display}`);
-
-        // 若使用者尚未進入主畫面（仍在登入/身分選擇頁），忽略此事件
-        // enterApp() 完成後會自行呼叫 loadDataAndSync()
-        if (!mainAppSection || mainAppSection.style.display === 'none') {
-            console.warn(`[GAS] ⚠️ User not yet in main app (mainAppSection.display=${mainAppSection?.style?.display}), IGNORING restore event - WILL WAIT FOR BANNER RETRY`);
-            return;
-        }
-        console.log(`[GAS] ✅ Processing restore event now...`);
-        showSnackbar('✅ 備份資料已從 Google Sheet 還原，正在載入...', null, 2000);
-        // 移除 GAS 還原橫幅（若還在）
-        const banner = document.getElementById('gas-restore-banner');
-        if (banner) {
-            console.log(`[GAS] Removing banner (found)`);
-            banner.remove();
-        } else {
-            console.log(`[GAS] No banner to remove`);
-        }
-        await loadDataAndSync();
-        refreshAllViews();
-    });
 
     // --- 編輯權相關事件 ---
     socket.on('editor_acquire_result', (data) => {
@@ -715,9 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginMessage = document.getElementById('login-message');
     const serverStatusEl = document.getElementById('server-status');
 
-    // ── 頁面載入後立即預熱伺服器 + GAS ──
     // Render 免費方案冷啟動需 15-30 秒，頁面一打開就先 ping，
-    // 讓使用者輸入 ID 的這段時間同步完成伺服器與 GAS 的暖機。
     (async function warmUpOnLoad() {
         if (serverStatusEl) serverStatusEl.innerHTML = '🔄 連線伺服器中...';
         if (loginBtn) loginBtn.disabled = true;
@@ -1018,14 +989,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showSnackbar('離線模式：無法連線至伺服器，資料僅存於本機', null, 4000);
         }
 
-        // 若 GAS 正在背景還原，顯示提示橫幅 + 30 秒自動重試保底
-        if (syncResult && syncResult.gasRestoreInProgress) {
-            _showGasRestoreBanner();
-        }
     }
 
-    // GAS 還原中橫幅（含手動重試按鈕與自動重試保底）
-    function _showGasRestoreBanner() {
         let banner = document.getElementById('gas-restore-banner');
         if (banner) return; // 已顯示
         banner = document.createElement('div');
@@ -1038,16 +1003,13 @@ document.addEventListener('DOMContentLoaded', () => {
             'max-width:90vw;text-align:center;'
         ].join('');
         const msg = document.createElement('span');
-        msg.textContent = '🔄 正在從 Google Sheet 還原備份資料...';
         banner.appendChild(msg);
         const btnRetry = document.createElement('button');
         btnRetry.textContent = '重新載入';
         btnRetry.style.cssText = 'background:#1c1917;color:#fbbf24;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:0.88em;white-space:nowrap;';
         btnRetry.onclick = async () => {
-            msg.textContent = '🔄 重新連線 Google Sheet...';
             btnRetry.disabled = true;
 
-            // 先嘗試先讀本機（可能已被 gas_restore_ready 寫入但事件漏收）
             const quickSync = await loadDataAndSync();
             if (!document.getElementById('gas-restore-banner')) return;
             const hasDataNow = students.length > 0 || courses.length > 0 || teachers.length > 0;
@@ -1058,16 +1020,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 本機仍無資料 → 呼叫 force-restore，清除後端快取並重啟 GAS 拉取
             try {
-                msg.textContent = '🔄 強制從 Google Sheet 重新取得資料...';
                 const forceResp = await fetchWithTimeout(
                     `${API_BASE}/gas-restore-force/${encodeURIComponent(CURRENT_USER)}`,
                     { method: 'POST', headers: API_HEADERS }, 10000
                 );
                 if (forceResp && forceResp.ok) {
-                    msg.textContent = '⏳ 已觸發還原，等待 Google Sheet 回應（約 15-30 秒）...';
-                    // 等待 gas_restore_ready WebSocket 通知（由伺服器推送）
                     // 若 30 秒後仍未到，自動再 loadDataAndSync 一次
                     setTimeout(async () => {
                         if (!document.getElementById('gas-restore-banner')) return;
@@ -1079,7 +1037,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             banner.remove();
                             showSnackbar('✅ 備份資料已還原', null, 2500);
                         } else {
-                            msg.textContent = '⚠️ 無法從 Google Sheet 取得資料，請確認 GAS 設定';
                             btnRetry.disabled = false;
                             btnRetry.textContent = '再試一次';
                         }
@@ -1104,14 +1061,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(banner);
 
         // 自動重試迴圈：每 30 秒嘗試一次，最多 4 次。
-        // 第 2 次起若後端已確認空（gasRestoreInProgress: false），改呼叫 force-restore 清除快取。
+
         let _bannerRetryCount = 0;
         const MAX_BANNER_RETRIES = 4;
         const _bannerStartTime = Date.now();
         async function _bannerAutoRetry() {
             if (!document.getElementById('gas-restore-banner')) {
                 const elapsedSec = ((Date.now() - _bannerStartTime) / 1000).toFixed(1);
-                console.log(`[BANNER] 【${elapsedSec}s】Auto-retry check: banner already removed (likely by gas_restore_ready), exiting`);
                 return; // 已被移除
             }
             if (_bannerRetryCount >= MAX_BANNER_RETRIES) {
@@ -1124,11 +1080,9 @@ document.addEventListener('DOMContentLoaded', () => {
             _bannerRetryCount++;
             const elapsedSec = ((Date.now() - _bannerStartTime) / 1000).toFixed(1);
             console.log(`[BANNER] 【${elapsedSec}s】Retry #${_bannerRetryCount} triggered`);
-            msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
             btnRetry.disabled = true;
 
             // 第 2 次起：先呼叫 force-restore 清除後端 confirmed_empty 快取
-            // 避免後端因先前的 "GAS 回傳空" 快取而永不重試
             if (_bannerRetryCount >= 2) {
                 try {
                     await fetchWithTimeout(
@@ -1136,7 +1090,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         { method: 'POST', headers: API_HEADERS }, 8000
                     );
                 } catch (_) { /* 忽略，繼續 loadDataAndSync */ }
-                // 給 GAS 20 秒啟動時間，再 loadDataAndSync 取結果
                 await new Promise(r => setTimeout(r, 20000));
                 if (!document.getElementById('gas-restore-banner')) return;
             }
@@ -1148,16 +1101,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hasData) {
                 banner.remove();
                 showSnackbar('✅ 備份資料已還原', null, 2500);
-            } else if (syncResult && syncResult.gasRestoreInProgress) {
-                msg.textContent = `🔄 Google Sheet 還原中，請稍候... (第 ${_bannerRetryCount} 次)`;
-                btnRetry.disabled = false;
-                setTimeout(_bannerAutoRetry, 30000);
-            } else {
-                msg.textContent = `🔄 正在從 Google Sheet 還原備份資料... (第 ${_bannerRetryCount} 次)`;
-                btnRetry.disabled = false;
-                setTimeout(_bannerAutoRetry, 30000);
-            }
-        }
         setTimeout(_bannerAutoRetry, 30000);
     }
 
@@ -1204,11 +1147,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 : { success: false, error: 'timeout' };
 
             let bestRemoteData = null;
-            // 若伺服器逾時（冷啟動），當作 gasRestoreInProgress 處理
+
             // → 顯示還原橫幅讓用戶知道仍在等待，並在 30 秒後自動重試
             if (serverResult && serverResult.error === 'timeout') {
                 console.warn('[loadDataAndSync] 伺服器回應逾時，顯示還原橫幅等待重試');
-                return { gasRestoreInProgress: true };
+                return {};
             }
             const serverHasData = serverResult && serverResult.success && serverResult.data;
 
@@ -1226,11 +1169,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     bestRemoteData = localData;
                     setTimeout(() => saveAllDataToServer(true), 500);
                 }
-            } else if (serverResult && serverResult.gasRestoreInProgress) {
-                // 伺服器正在背景從 GAS 還原 → 不阻塞，立即進入 App 顯示空畫面
-                // 還原完成後由 socket.on('gas_restore_ready') 自動觸發資料刷新
+
                 _gasRestoreWasInProgress = true;
-                console.log('[loadDataAndSync] GAS restore in progress, entering app immediately...');
             }
 
             // --- B. 使用遠端資料 ---
@@ -1240,19 +1180,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 _baseSnapshot = JSON.parse(JSON.stringify(bestRemoteData));
                 _isDataStale = false;
             } else if (!_gasRestoreWasInProgress) {
-                // --- C. 確認無遠端資料（GAS 也確認無備份）→ 全新帳號 ---
-                // 注意：GAS restore 超時時不走此路徑，避免空資料覆蓋 GAS 備份
                 // 不自動儲存空資料，讓使用者開始輸入後再存
             } else {
-                // GAS restore 超時，不確定是否有備份 → 保持空白，不寫入任何資料
-                console.log('[loadDataAndSync] GAS restore timed out, keeping empty state (NOT saving)');
             }
 
         } catch (err) {
             console.warn('Critical error during loadDataAndSync:', err);
         }
 
-        return { gasRestoreInProgress: _gasRestoreWasInProgress };
+        return {};
     }
 
     async function saveToCustomServer(data) {
@@ -1672,7 +1608,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     let studentManualEntries = store.get('studentManualEntries', {}); // { studentId: { 'monday-1': 'text', ... } }
     let slotOverrides = store.get('slotOverrides', {}); // { slotKey: { courseId: { groupName: [studentId, ...] } } }
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyWP67hqVEzOagyk7JQgSJ2Ogaj8ZZrfoB2ZvA1Az_mYfXpfAv-iuA2QN8RKjJ4oxiS/exec';
 
     // Sanitize schedule data to remove invalid entries
     sanitizeScheduleData();
@@ -2005,20 +1940,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // New: Cloud Backup (Google Sheets)
     const btnCloudBackup = document.getElementById('btn-cloud-backup');
     const btnLogout = document.getElementById('btn-logout');
-    // UI elements for GAS URL have been removed
-
 
     // Extracted backup function
     async function backupToCloud(skipConfirm = false) {
-        if (!GAS_API_URL) {
             showSnackbar('系統未設定 Google Apps Script 網址，請聯繫管理員！');
             return false;
         }
 
-        if (!skipConfirm && !confirm('確定要將目前資料備份到 Google Sheet 嗎？')) return false;
 
         if (btnCloudBackup) {
             btnCloudBackup.disabled = true;
@@ -2026,11 +1956,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            // 儲存至伺服器（伺服器端會自動以 Server Key 備份至 GAS，不需前端直接呼叫 GAS）
-            // 這樣避免了前端無 Server Key 導致 GAS 驗證失敗的問題
             const saved = await saveAllDataToServer(true);
 
-            if (!skipConfirm) showSnackbar('✅ 資料已備份至 Google Cloud', null, 3000);
 
             // Update Cloud Backup Timestamp
             store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
@@ -2045,8 +1972,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             if (btnCloudBackup) {
                 btnCloudBackup.disabled = false;
-                btnCloudBackup.textContent = '備份至 Google Cloud'; // Reset text
-                btnCloudBackup.innerHTML = '<span class="icon">☁️</span><span>備份至 Google Cloud</span>';
             }
         }
     }
@@ -2098,14 +2023,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Also call on load
     updateCloudSyncStatus();
 
-
     if (btnLogout) {
         btnLogout.addEventListener('click', handleLogout);
     }
 
     async function handleLogout() {
         // 詢問用戶是否備份
-        if (confirm('登出前是否要備份資料至 Google Cloud？\n(建議點選「確定」以確保資料安全)')) {
             const success = await backupToCloud(true); // true = skip duplicate confirm
             if (success) {
                 showSnackbar('備份成功，即將登出...');
@@ -3890,7 +3813,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-
     // Helper function to calculate teacher statistics
     function calculateTeacherStats() {
         const teacherStats = {};
@@ -5139,7 +5061,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.style.display = 'block'; modalDirty = false;
     };
 
-
     function saveStudentOverride(slotKey, courseId, groupName, baseStudents) {
         // Get selected students
         const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]:checked');
@@ -5295,7 +5216,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('此時段未進行過調整', 'info');
         }
     }
-
 
     function generateClassroomSchedules() {
         let html = '';
@@ -6350,13 +6270,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-
     const btnExportMasterScheduleWord = document.getElementById('btn-export-master-schedule-word');
     if (btnExportMasterScheduleWord) {
         btnExportMasterScheduleWord.addEventListener('click', window.exportMasterScheduleWord);
     }
-
-
 
     function getFormattedDate() {
         const now = new Date();
