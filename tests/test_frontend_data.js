@@ -23,6 +23,61 @@ global.window.location = {
 };
 global.self = global;
 
+// Mock document object
+class MockElement {
+    constructor(id = '', tag = 'div') {
+        this.id = id;
+        this.tagName = tag.toUpperCase();
+        this.className = '';
+        this.style = {};
+        this.innerHTML = '';
+        this.value = '';
+        this.textContent = '';
+        this.checked = false;
+        this.disabled = false;
+        this.children = [];
+        this.parentElement = null;
+        this.offsetHeight = 100;
+        this.offsetWidth = 100;
+    }
+
+    addEventListener() {}
+    removeEventListener() {}
+    appendChild() { return this; }
+    removeChild() { return this; }
+    insertBefore() { return this; }
+    getAttribute() { return null; }
+    setAttribute() {}
+    removeAttribute() {}
+    querySelector() { return new MockElement(); }
+    querySelectorAll() { return []; }
+    getElementById() { return new MockElement(); }
+    getContext() { return { fillRect: () => {}, clearRect: () => {} }; }
+    classList = { add: () => {}, remove: () => {}, contains: () => false, toggle: () => {} };
+}
+
+const mockElements = {};
+
+global.document = {
+    getElementById: (id) => mockElements[id] || new MockElement(id),
+    createElement: (tag) => new MockElement('', tag),
+    querySelector: () => new MockElement(),
+    querySelectorAll: () => [],
+    addEventListener: (event, callback) => {
+        if (event === 'DOMContentLoaded') {
+            global._domContentLoadedCallback = callback;
+        }
+        if (!eventListeners[event]) {
+            eventListeners[event] = [];
+        }
+        eventListeners[event].push(callback);
+    },
+    removeEventListener: () => {},
+    body: new MockElement(),
+    head: new MockElement(),
+    documentElement: new MockElement()
+};
+
 // Mock LocalStorage
 const localStorageMock = (() => {
     let store = {};
