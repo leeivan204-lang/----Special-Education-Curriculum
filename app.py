@@ -79,7 +79,7 @@ def set_security_headers(response):
     # Content-Security-Policy：限制資源來源
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://cdn.socket.io; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://accounts.google.com https://cdn.socket.io; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "connect-src 'self' ws: wss: https://script.google.com https://script.googleusercontent.com https://accounts.google.com; "
