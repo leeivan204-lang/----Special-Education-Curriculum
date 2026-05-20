@@ -66,7 +66,19 @@ logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 app = Flask(__name__, static_url_path='', static_folder=STATIC_FOLDER)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 限制請求大小 5MB
 CORS(app, origins=ALLOWED_ORIGINS)
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, async_mode=_ASYNC_MODE if _os.environ.get('RENDER') else None)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=ALLOWED_ORIGINS,
+    async_mode=_ASYNC_MODE if _os.environ.get('RENDER') else None,
+    # Render 環境優化
+    ping_timeout=60,           # 增加 ping 超時
+    ping_interval=25,          # 定期 ping 保持連線
+    connect_timeout=30,        # WebSocket 連線超時
+    # 傳輸方式：優先 WebSocket，降級到輪詢
+    transports=['websocket', 'polling'],
+    upgrade_package='polling'   # 輪詢作為升級包
+)
+logger.info(f"Socket.IO configured with transports: websocket, polling")
 
 # --- 安全性 HTTP 標頭 ---
 @app.after_request
