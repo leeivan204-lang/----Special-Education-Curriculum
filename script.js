@@ -756,13 +756,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginMessage = document.getElementById('login-message');
     const serverStatusEl = document.getElementById('server-status');
 
-    // Render 免費方案冷啟動需 15-30 秒，頁面一打開就先 ping，
+    // Render 免費方案冷啟動需 15-30 秒，頁面一打開就先 ping
+    // 最多等 50 秒；若超時，仍啟用登入按鈕讓使用者嘗試
     (async function warmUpOnLoad() {
         if (serverStatusEl) serverStatusEl.innerHTML = '🔄 連線伺服器中...';
         if (loginBtn) loginBtn.disabled = true;
+
+        // 設定絕對超時：無論如何，50 秒後啟用登入按鈕
+        const absoluteTimeout = setTimeout(() => {
+            if (serverStatusEl) serverStatusEl.innerHTML = '⚠️ 伺服器連線較慢，仍可嘗試登入';
+            if (loginBtn) loginBtn.disabled = false;
+        }, 50000);
+
         try {
             // 最多等 45 秒（Render 冷啟動最壞情況約 30 秒）
             const resp = await fetchWithTimeout(`${API_BASE}/ping`, {}, 45000);
+            clearTimeout(absoluteTimeout);
+
             if (resp) {
                 if (serverStatusEl) serverStatusEl.innerHTML = '✅ 伺服器已連線';
                 if (loginBtn) loginBtn.disabled = false;
@@ -775,6 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (loginBtn) loginBtn.disabled = false;
             }
         } catch (e) {
+            clearTimeout(absoluteTimeout);
             if (serverStatusEl) serverStatusEl.innerHTML = '⚠️ 無法連線伺服器，可能為離線模式';
             if (loginBtn) loginBtn.disabled = false;
         }
