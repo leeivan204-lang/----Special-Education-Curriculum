@@ -379,11 +379,25 @@ document.addEventListener('DOMContentLoaded', () => {
             renderRoleBar();
             showSnackbar('✏️ 您是編輯者，可以修改資料', null, 2500);
         } else {
-            MY_ROLE = 'viewer';
-            CURRENT_EDITOR_SID = data.currentEditorSid || null;
-            stopEditorHeartbeat();
-            renderRoleBar();
-            showSnackbar('👁️ 已有其他裝置在編輯，您為檢視者', null, 3000);
+            // 檢查是否真的有其他編輯者存在
+            const hasRealEditor = data.currentEditorSid && data.currentEditorSid !== socket.id;
+
+            if (hasRealEditor) {
+                // 真的有其他人在編輯
+                MY_ROLE = 'viewer';
+                CURRENT_EDITOR_SID = data.currentEditorSid;
+                stopEditorHeartbeat();
+                renderRoleBar();
+                showSnackbar('👁️ 已有其他裝置在編輯，您為檢視者', null, 3000);
+            } else {
+                // 沒有真正的編輯者，視為編輯權可用但被拒（不應該發生）
+                // 自動重新嘗試獲取
+                MY_ROLE = 'editor';
+                CURRENT_EDITOR_SID = socket.id;
+                startEditorHeartbeat();
+                renderRoleBar();
+                // 不顯示提示，因為這是預期外的狀態
+            }
         }
         applyRoleUI();
     });
