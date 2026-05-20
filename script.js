@@ -24,6 +24,7 @@
  * └─────────────────────────────────────────────────────┘
  */
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('[SCRIPT] script.js loaded - renderRoleBar should be undefined');
     // Check if running in test environment
     const isTestEnvironment = typeof global !== 'undefined' && global.__IS_TEST__;
 
@@ -338,11 +339,6 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('connect', () => {
         if (CURRENT_USER) {
             socket.emit('join', { userId: CURRENT_USER });
-            // 重新連線時恢復角色：僅當使用者是編輯者才重新取鎖
-            // 若使用者明確選擇「檢視者」，不自動升級
-            if (MY_ROLE !== 'viewer') {
-                socket.emit('editor_acquire', { userId: CURRENT_USER });
-            }
         }
     });
 
@@ -368,38 +364,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // --- 編輯權相關事件 ---
+    // --- 編輯權相關事件 (已禁用) ---
     socket.on('editor_acquire_result', (data) => {
-        if (data.success) {
-            // 若使用者明確選擇「檢視者」，忽略 WebSocket 的自動授權
-            if (MY_ROLE === 'viewer') return;
-            MY_ROLE = 'editor';
-            CURRENT_EDITOR_SID = socket.id;
-            startEditorHeartbeat();
-            renderRoleBar();
-            showSnackbar('✏️ 您是編輯者，可以修改資料', null, 2500);
-        } else {
-            // 檢查是否真的有其他編輯者存在
-            const hasRealEditor = data.currentEditorSid && data.currentEditorSid !== socket.id;
-
-            if (hasRealEditor) {
-                // 真的有其他人在編輯
-                MY_ROLE = 'viewer';
-                CURRENT_EDITOR_SID = data.currentEditorSid;
-                stopEditorHeartbeat();
-                renderRoleBar();
-                showSnackbar('👁️ 已有其他裝置在編輯，您為檢視者', null, 3000);
-            } else {
-                // 沒有真正的編輯者，視為編輯權可用但被拒（不應該發生）
-                // 自動重新嘗試獲取
-                MY_ROLE = 'editor';
-                CURRENT_EDITOR_SID = socket.id;
-                startEditorHeartbeat();
-                renderRoleBar();
-                // 不顯示提示，因為這是預期外的狀態
-            }
-        }
-        applyRoleUI();
+        // 編輯權競爭已移除，此事件監聽保留以支持舊版本相容性，但不處理
     });
 
     socket.on('editor_changed', (state) => {
@@ -425,8 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             MY_ROLE = 'viewer';
         }
-        renderRoleBar();
-        applyRoleUI();
     });
 
     socket.on('editor_request_incoming', (data) => {
@@ -438,8 +403,6 @@ document.addEventListener('DOMContentLoaded', () => {
         MY_ROLE = 'editor';
         CURRENT_EDITOR_SID = socket.id;
         startEditorHeartbeat();
-        renderRoleBar();
-        applyRoleUI();
         showSnackbar('✏️ 已取得編輯權', null, 2500);
     });
 
@@ -458,8 +421,6 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('editor_kicked', (data) => {
         MY_ROLE = 'viewer';
         stopEditorHeartbeat();
-        renderRoleBar();
-        applyRoleUI();
         alert(data.message || '管理員已接管編輯權');
     });
 
@@ -468,8 +429,6 @@ document.addEventListener('DOMContentLoaded', () => {
             MY_ROLE = 'editor';
             CURRENT_EDITOR_SID = socket.id;
             startEditorHeartbeat();
-            renderRoleBar();
-            applyRoleUI();
             showSnackbar('✏️ 已強制接管編輯權', null, 2500);
         } else {
             alert('接管失敗：' + (data.message || '未知錯誤'));
@@ -494,8 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     MY_ROLE = 'editor';
                     CURRENT_EDITOR_SID = socket.id;
                     startEditorHeartbeat();
-                    renderRoleBar();
-                    applyRoleUI();
                 }
                 return;
             }
@@ -504,15 +461,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     MY_ROLE = 'editor';
                     CURRENT_EDITOR_SID = socket.id;
                     startEditorHeartbeat();
-                    renderRoleBar();
-                    applyRoleUI();
                 }
             } else {
                 if (MY_ROLE !== 'editor') {
                     MY_ROLE = 'viewer';
                     CURRENT_EDITOR_SID = result.currentEditorSid || null;
-                    renderRoleBar();
-                    applyRoleUI();
                 }
             }
         } catch (e) {
@@ -522,8 +475,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 MY_ROLE = 'editor';
                 CURRENT_EDITOR_SID = socket.id;
                 startEditorHeartbeat();
-                renderRoleBar();
-                applyRoleUI();
             }
         }
     }
@@ -544,107 +495,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function applyRoleUI() {
-        if (MY_ROLE === 'viewer') {
-            document.body.classList.add('viewer-mode');
-        } else {
-            document.body.classList.remove('viewer-mode');
-        }
+        // 編輯權競爭已移除，此函數已空化
     }
 
-    function renderRoleBar() {
-        if (!CURRENT_USER) return;
-        let bar = document.getElementById('role-bar');
-        if (!bar) {
-            bar = document.createElement('div');
-            bar.id = 'role-bar';
-            document.body.insertBefore(bar, document.body.firstChild);
-        }
-        const isEditor = (MY_ROLE === 'editor');
-        const isPending = (MY_ROLE === null);
-        const editorInfo = isPending
-            ? '正在編輯'
-            : (isEditor
-                ? '✏️ 編輯模式'
-                : '👁️ 檢視模式');
-        const bgColor = isPending
-            ? 'background:linear-gradient(90deg,#6b7280 0%,#9ca3af 100%);'
-            : (isEditor
-                ? 'background:linear-gradient(90deg,#059669 0%,#10b981 100%);'
-                : 'background:linear-gradient(90deg,#475569 0%,#64748b 100%);');
-        bar.style.cssText = `position:relative;width:100%;padding:6px 14px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:10px;box-sizing:border-box;font-weight:600;font-size:0.92em;z-index:10000;${bgColor}`;
-        bar.innerHTML = '';
-
-        // 左側：登入 ID（醒目顯示）
-        const userChip = document.createElement('span');
-        userChip.textContent = `👤 ${CURRENT_USER}`;
-        userChip.style.cssText = 'background:rgba(255,255,255,0.22);padding:3px 12px;border-radius:20px;font-size:0.95em;font-weight:700;letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30vw;flex-shrink:0;';
-        userChip.title = CURRENT_USER;
-        bar.appendChild(userChip);
-
-        // 中間：角色狀態
-        const msg = document.createElement('span');
-        msg.textContent = editorInfo;
-        msg.style.cssText = 'flex:1;text-align:center;';
-        bar.appendChild(msg);
-        if (isPending) {
-            // 尚未確認角色，不顯示按鈕
-            return;
-        }
-        if (isEditor) {
-            const btnRelease = document.createElement('button');
-            btnRelease.textContent = '釋放編輯權';
-            btnRelease.className = 'viewer-allowed';
-            btnRelease.style.cssText = 'background:#fff;color:#065f46;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.88em;';
-            btnRelease.onclick = () => {
-                if (confirm('確定要釋放編輯權？其他裝置將可申請編輯。')) {
-                    socket.emit('editor_release', { userId: CURRENT_USER });
-                }
-            };
-            bar.appendChild(btnRelease);
-        } else {
-            const btnRequest = document.createElement('button');
-            btnRequest.textContent = '申請編輯權';
-            btnRequest.className = 'viewer-allowed';
-            btnRequest.style.cssText = 'background:#fbbf24;color:#1e3a8a;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.88em;';
-            btnRequest.onclick = () => {
-                socket.emit('editor_request', { userId: CURRENT_USER, name: CURRENT_USER });
-            };
-            bar.appendChild(btnRequest);
-
-            const btnAdmin = document.createElement('button');
-            btnAdmin.textContent = '管理員模式';
-            btnAdmin.className = 'viewer-allowed';
-            btnAdmin.style.cssText = 'background:transparent;color:#fff;border:1px solid #fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.82em;';
-            btnAdmin.onclick = async () => {
-                const pwd = prompt('請輸入管理員密碼以強制接管編輯權：');
-                if (!pwd) return;
-                // 先送 WebSocket，再用 HTTP 備援（Render WebSocket 可能不穩）
-                socket.emit('editor_takeover', { userId: CURRENT_USER, adminPassword: pwd });
-                try {
-                    const raw = await fetchWithTimeout(`${API_BASE}/editor/takeover`, {
-                        method: 'POST',
-                        headers: API_HEADERS,
-                        body: JSON.stringify({ userId: CURRENT_USER, adminPassword: pwd, socketId: socket.id || null })
-                    }, 8000);
-                    const result = raw ? await raw.json() : null;
-                    if (!result) throw new Error('timeout');
-                    if (result.success) {
-                        MY_ROLE = 'editor';
-                        CURRENT_EDITOR_SID = socket.id;
-                        startEditorHeartbeat();
-                        renderRoleBar();
-                        applyRoleUI();
-                        showSnackbar('✅ 已強制取得編輯權', null, 2000);
-                    } else {
-                        showSnackbar('❌ ' + (result.message || '接管失敗'), null, 3000);
-                    }
-                } catch (e) {
-                    showSnackbar('❌ 網路錯誤，接管失敗', null, 3000);
-                }
-            };
-            bar.appendChild(btnAdmin);
-        }
-    }
 
     function showIncomingRequestModal(requesterSid, requesterName) {
         if (_incomingRequestModal) _incomingRequestModal.remove();
@@ -955,8 +808,6 @@ document.addEventListener('DOMContentLoaded', () => {
         mainAppSection.style.display = 'flex';
 
         // 初始化空白系統
-        renderRoleBar();
-        applyRoleUI();
         refreshAllViews();
 
         if (offlineMode) {
@@ -1139,8 +990,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 MY_ROLE = 'viewer';
                 CURRENT_EDITOR_SID = result.currentEditorSid || null;
                 stopEditorHeartbeat();
-                renderRoleBar();
-                applyRoleUI();
                 return;
             }
 
