@@ -1922,6 +1922,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Restore Data
     function restoreData(data, reload = true) {
+        // Save to localStorage
         if (data.courses) store.set('courses', data.courses);
         if (data.teachers) store.set('teachers', data.teachers);
         if (data.students) store.set('students', data.students);
@@ -1932,9 +1933,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.studentManualEntries) store.set('studentManualEntries', data.studentManualEntries);
         if (data.slotOverrides) store.set('slotOverrides', data.slotOverrides);
         if (data.scheduleTitle) store.set('scheduleTitle', data.scheduleTitle);
-        // Note: We don't restore gasWebAppUrl from backup file, it's a local setting.
 
         store.setRaw('lastSavedTimestamp', data.timestamp || Date.now());
+
+        // Update in-memory variables to match restored data
+        if (data.courses) courses = data.courses;
+        if (data.teachers) teachers = data.teachers;
+        if (data.students) students = data.students;
+        if (data.scheduleData) scheduleData = data.scheduleData;
+        if (data.assignments) assignments = data.assignments;
+        if (data.implementationDates) implementationDates = data.implementationDates;
+        if (data.teacherPartTimeMarks) teacherPartTimeMarks = data.teacherPartTimeMarks;
+        if (data.studentManualEntries) studentManualEntries = data.studentManualEntries;
+        if (data.slotOverrides) timeSlotOverrides = data.slotOverrides;
+        if (data.scheduleTitle) scheduleTitle = data.scheduleTitle;
+
+        // Refresh UI to display restored data
+        refreshAllViews();
 
         // Sync restored data to server（使用者主動匯入，強制覆蓋）
         saveAllDataToServer(true);
@@ -1942,6 +1957,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reload) {
             showSnackbar('資料載入成功！網頁將自動重新整理。');
             setTimeout(() => location.reload(), 1500);
+        } else {
+            showSnackbar('資料匯入成功！');
         }
     }
 
