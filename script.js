@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only initialize DOM in production/browser environment
     if (!isTestEnvironment) {
         // --- 版本資訊 ---
-        const VERSION_NUMBER = '2026.05.20a';
+        const VERSION_NUMBER = '2026.05.20b';
         const VERSION_DATE = 'May 20, 2026';  // 自動更新日期
 
         // 初始化版本號顯示
