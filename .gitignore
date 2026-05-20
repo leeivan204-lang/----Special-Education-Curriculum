@@ -22,11 +22,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environment
+# Virtual Environment & Environment Variables
 venv/
 env/
 ENV/
 .env
+.env.local
 
 # IDE / Editor
 .vscode/
