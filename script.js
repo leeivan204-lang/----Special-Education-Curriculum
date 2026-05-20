@@ -1900,10 +1900,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Extracted backup function
     async function backupToCloud(skipConfirm = false) {
+        if (!GAS_WEBHOOK_URL) {
             showSnackbar('系統未設定 Google Apps Script 網址，請聯繫管理員！');
             return false;
         }
-
 
         if (btnCloudBackup) {
             btnCloudBackup.disabled = true;
@@ -1912,7 +1912,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const saved = await saveAllDataToServer(true);
-
 
             // Update Cloud Backup Timestamp
             store.setRaw('lastCloudBackupTimestamp', new Date().getTime());
