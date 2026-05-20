@@ -1849,7 +1849,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = JSON.parse(content);
 
                     if (confirm(`確定要還原 ${data.timestamp || '此備份檔案'} 嗎？\n這將會覆蓋現有的所有資料！`)) {
-                        restoreData(data);
+                        restoreData(data, false);
                     }
                 } catch (err) {
                     showSnackbar('還原失敗：檔案格式錯誤，請確認為正確的備份檔。');
