@@ -957,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 平行加載資料：在身份選擇頁面時背景加載，使用者點擊按鈕後資料已準備好
+    // 平行加載資料：在身份選擇時啟動
     let _parallelDataLoadPromise = null;
 
     // ── 顯示身分別選擇頁 ──
@@ -989,10 +989,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         loginSection.style.display = 'none';
         roleSection.style.display = 'flex';
-
-        // 平行加載資料：在背景開始載入，使用者選擇身分時資料已準備好
-        console.log('[Perf] 開始平行加載資料');
-        _parallelDataLoadPromise = loadDataAndSync();
     }
 
     // ── 登入流程：Step 2 — 選擇身分後進入 App ──
@@ -1007,52 +1003,55 @@ document.addEventListener('DOMContentLoaded', () => {
         if (roleMessage) roleMessage.textContent = '進入中...';
 
         try {
-            if (chosenRole === 'editor') {
-                // 嘗試取得編輯鎖（逾時 8 秒，冷啟動時不卡住）
-                const lockRaw = await fetchWithTimeout(`${API_BASE}/editor/acquire`, {
-                    method: 'POST',
-                    headers: API_HEADERS,
-                    body: JSON.stringify({ userId: CURRENT_USER, socketId: socket.id || null })
-                }, 8000);
-                const lockResp = lockRaw ? await lockRaw.json().catch(() => null) : null;
+            // 平行執行：同時進行編輯鎖取得和資料加載
+            let editorSetup = Promise.resolve();
 
-                if (!lockRaw) {
-                    // 伺服器逾時（冷啟動）→ 無法確認鎖狀態，預設為編輯者（單人使用情境）
-                    MY_ROLE = 'editor';
-                    CURRENT_EDITOR_SID = socket.id || null;
-                    startEditorHeartbeat();
-                } else if (lockResp && lockResp.success) {
-                    MY_ROLE = 'editor';
-                    CURRENT_EDITOR_SID = socket.id || lockResp.since;
-                    startEditorHeartbeat();
-                } else {
-                    // 伺服器明確回覆：鎖已被其他裝置佔用 → 改為檢視者
-                    MY_ROLE = 'viewer';
-                    if (roleMessage) roleMessage.textContent = '⚠️ 已有其他裝置持有編輯權，以檢視者身份進入';
-                    await new Promise(r => setTimeout(r, 1500));
-                }
+            if (chosenRole === 'editor') {
+                // 啟動編輯鎖取得（同時進行，不等待）
+                editorSetup = (async () => {
+                    const lockRaw = await fetchWithTimeout(`${API_BASE}/editor/acquire`, {
+                        method: 'POST',
+                        headers: API_HEADERS,
+                        body: JSON.stringify({ userId: CURRENT_USER, socketId: socket.id || null })
+                    }, 8000);
+                    const lockResp = lockRaw ? await lockRaw.json().catch(() => null) : null;
+
+                    if (!lockRaw) {
+                        MY_ROLE = 'editor';
+                        CURRENT_EDITOR_SID = socket.id || null;
+                        startEditorHeartbeat();
+                    } else if (lockResp && lockResp.success) {
+                        MY_ROLE = 'editor';
+                        CURRENT_EDITOR_SID = socket.id || lockResp.since;
+                        startEditorHeartbeat();
+                    } else {
+                        MY_ROLE = 'viewer';
+                        if (roleMessage) roleMessage.textContent = '⚠️ 已有其他裝置持有編輯權，以檢視者身份進入';
+                        await new Promise(r => setTimeout(r, 1500));
+                    }
+                })();
             } else {
-                // 直接以檢視者進入
                 MY_ROLE = 'viewer';
             }
 
-            // 只有選擇「編輯者」才補送 WebSocket acquire；
-            // 選「檢視者」不送，避免被伺服器自動授予編輯權
+            // 同時啟動資料加載（若尚未加載）
+            if (!_parallelDataLoadPromise) {
+                console.log('[Perf] 啟動資料加載');
+                _parallelDataLoadPromise = loadDataAndSync();
+            }
+
+            // 等待編輯鎖和資料加載都完成（並行進行）
+            console.log('[Perf] 等待編輯鎖和資料加載...');
+            await Promise.all([editorSetup, _parallelDataLoadPromise]);
+            console.log('[Perf] 編輯鎖和資料加載都已完成');
+            _parallelDataLoadPromise = null;
+
+            // 只有選擇「編輯者」才補送 WebSocket acquire
             if (MY_ROLE !== 'viewer') {
                 socket.emit('editor_acquire', { userId: CURRENT_USER });
             }
 
-            // 等待平行加載的資料完成
-            let dataReady = false;
-            if (_parallelDataLoadPromise) {
-                console.log('[Perf] 等待平行加載資料完成...');
-                await _parallelDataLoadPromise;
-                console.log('[Perf] 平行加載資料已完成');
-                _parallelDataLoadPromise = null;
-                dataReady = true;  // 標記資料已在背景加載完成
-            }
-
-            await enterApp(null, false, dataReady);
+            await enterApp(null, false, true);  // true = 資料已加載
 
         } finally {
             if (btnEditor) btnEditor.disabled = false;
