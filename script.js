@@ -957,6 +957,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 平行加載資料：在身份選擇頁面時背景加載，使用者點擊按鈕後資料已準備好
+    let _parallelDataLoadPromise = null;
+
     // ── 顯示身分別選擇頁 ──
     function showRoleSection(userId, editorInfo) {
         const roleSection = document.getElementById('role-section');
@@ -986,6 +989,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         loginSection.style.display = 'none';
         roleSection.style.display = 'flex';
+
+        // 平行加載資料：在背景開始載入，使用者選擇身分時資料已準備好
+        console.log('[Perf] 開始平行加載資料');
+        _parallelDataLoadPromise = loadDataAndSync();
     }
 
     // ── 登入流程：Step 2 — 選擇身分後進入 App ──
@@ -1034,7 +1041,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (MY_ROLE !== 'viewer') {
                 socket.emit('editor_acquire', { userId: CURRENT_USER });
             }
-            await enterApp();
+
+            // 等待平行加載的資料完成
+            let dataReady = false;
+            if (_parallelDataLoadPromise) {
+                console.log('[Perf] 等待平行加載資料完成...');
+                await _parallelDataLoadPromise;
+                console.log('[Perf] 平行加載資料已完成');
+                _parallelDataLoadPromise = null;
+                dataReady = true;  // 標記資料已在背景加載完成
+            }
+
+            await enterApp(null, false, dataReady);
 
         } finally {
             if (btnEditor) btnEditor.disabled = false;
@@ -1043,15 +1061,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── 進入主 App（載入資料 + 切換畫面）──
-    async function enterApp(forceRole = null, offlineMode = false) {
+    async function enterApp(forceRole = null, offlineMode = false, dataAlreadyLoaded = false) {
         if (forceRole) MY_ROLE = forceRole;
 
         // 重置記憶體與 localStorage，確保不殘留前一用戶的資料
         // resetState() 已包含 LAST_SYNCED_TIMESTAMP / _isDataStale / _isSaving 等暫態重置
         resetState();
 
+        // 平行加載優化：若資料已在身份選擇時加載，則跳過重複加載
         // 載入資料
-        const syncResult = await loadDataAndSync();
+        const syncResult = dataAlreadyLoaded ? {} : await loadDataAndSync();
 
         // 切換畫面
         const roleSection = document.getElementById('role-section');

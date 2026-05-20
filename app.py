@@ -523,24 +523,7 @@ def editor_takeover_http():
 # --- 健康檢查 / 預熱端點 ---
 @app.route('/api/ping', methods=['GET'])
 def api_ping():
-    """輕量健康檢查，同時在背景觸發 GAS 預熱（避免 GAS 冷啟動延遲資料還原）。"""
-    # 背景 ping GAS（僅當 GAS 已設定且距上次 ping 超過 3 分鐘）
-    if GAS_ENABLED:
-        now = _time.time()
-        last = getattr(api_ping, '_last_gas_ping', 0)
-        if now - last > 180:
-            api_ping._last_gas_ping = now
-            def _gas_warmup():
-                try:
-                    url = f"{GAS_WEBHOOK_URL}?ping=1"
-                    urllib.request.urlopen(
-                        urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT}),
-                        timeout=12
-                    ).read()
-                    logger.info("[Ping] GAS warmup OK")
-                except Exception as e:
-                    logger.debug(f"[Ping] GAS warmup: {e}")
-            threading.Thread(target=_gas_warmup, daemon=True, name='gas-warmup').start()
+    """輕量健康檢查。"""
     return jsonify({'status': 'ok', 'ts': _time.time()})
 
 # --- 簡易速率限制（記憶體內，適用於單機部署） ---
@@ -560,24 +543,6 @@ def _check_rate_limit():
         return True
     _rate_limit_store[ip].append(now)
     return False
-
-# --- Google Apps Script (GAS) 雲端備份 ---
-# Phase 2: GAS support has been removed. GAS_WEBHOOK_URL must be explicitly set via environment variable.
-# 可透過環境變數 GAS_WEBHOOK_URL 設定；預設為空（禁用 GAS）
-GAS_WEBHOOK_URL = os.environ.get('GAS_WEBHOOK_URL', '')
-GAS_ENABLED = bool(GAS_WEBHOOK_URL)
-
-# Google Apps Script 會擋下看起來像爬蟲的 User-Agent（Python-urllib/*）→ 回 401 Unauthorized
-# 使用瀏覽器風格的 User-Agent 避免被反機器人機制誤判
-GAS_USER_AGENT = 'Mozilla/5.0 (compatible; SpecialEdSchedule/1.0; +https://special-education-curriculum.onrender.com)'
-# 伺服器端與 GAS 溝通用的密鑰（繞過 OAuth，直接驗證）
-# 需與 GAS script properties 中的 SERVER_KEY 相同
-# Render 環境變數：GAS_SERVER_KEY
-GAS_SERVER_KEY = os.environ.get('GAS_SERVER_KEY', '')
-
-# 記錄哪些 user_id 已確認 GAS 無備份（避免每次登入都去 hit GAS）
-_gas_empty_cache = set()
-_gas_empty_cache_lock = threading.Lock()
 
 # ===== 記憶體快取（減少磁碟 I/O，加速讀取）=====
 # user_id -> {'data': dict, 'ts': float}
@@ -602,83 +567,6 @@ def _cache_invalidate(user_id):
     """清除指定 user_id 的快取。"""
     with _data_cache_lock:
         _data_cache.pop(user_id, None)
-
-def push_to_gas_async(user_id, data):
-    """背景執行緒推送資料到 GAS Google Sheet，不阻塞主請求。"""
-    if not GAS_ENABLED:
-        return
-    # 既然有新備份推出，清除「無備份」快取，下次冷啟動可正確還原
-    with _gas_empty_cache_lock:
-        _gas_empty_cache.discard(user_id)
-    def _push():
-        try:
-            payload = dict(data) if isinstance(data, dict) else {}
-            payload['userId'] = user_id
-            # 若有設定 Server Key，加入 payload（GAS 優先以 serverKey 驗證，不需 OAuth）
-            if GAS_SERVER_KEY:
-                payload['serverKey'] = GAS_SERVER_KEY
-            body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            req = urllib.request.Request(
-                GAS_WEBHOOK_URL,
-                data=body,
-                headers={
-                    'Content-Type': 'text/plain;charset=utf-8',
-                    'User-Agent': GAS_USER_AGENT,
-                },
-                method='POST'
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                resp.read()
-            logger.info(f"[GAS] Backup success for userId={user_id}")
-        except Exception as e:
-            logger.warning(f"[GAS] Backup failed for userId={user_id}: {e}")
-    t = threading.Thread(target=_push, daemon=True, name=f"gas-push-{user_id}")
-    t.start()
-
-def pull_from_gas(user_id, timeout=25):
-    """從 GAS 取得該 userId 的最新備份資料。找不到或失敗時回傳 None。
-    timeout 設 25 秒：GAS 冷啟動最長需 15-20 秒。
-    """
-    if not GAS_ENABLED:
-        return None
-    # 若此 user_id 先前已確認 GAS 「明確回傳無資料」，直接略過
-    with _gas_empty_cache_lock:
-        if user_id in _gas_empty_cache:
-            return None
-    try:
-        url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
-        # 若有設定 Server Key，附加於 URL query（GAS 優先以 serverKey 驗證）
-        if GAS_SERVER_KEY:
-            url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
-        logger.info(f"[GAS] Pulling data for userId={user_id} (timeout={timeout}s)...")
-        # GAS 會先 302 redirect → 需手動追蹤（最多 5 次）
-        req = urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode('utf-8')
-        result = json.loads(body)
-        gas_ok = result.get('success') or result.get('status') == 'success'
-        # 相容新版 GAS（同時有 success + status 欄位）與舊版（只有 status）
-        if gas_ok and result.get('data'):
-            data = result['data']
-            # GAS 存放的是完整 payload，可能含 userId 欄位，去除以免干擾
-            if isinstance(data, dict):
-                data.pop('userId', None)
-            logger.info(f"[GAS] Restore found for userId={user_id}")
-            return data
-        elif gas_ok and not result.get('data'):
-            # GAS 明確回覆成功但無資料 → 該 userId 確實尚無備份，放入快取避免重複請求
-            logger.info(f"[GAS] No backup found for userId={user_id}: {result.get('message')}")
-            with _gas_empty_cache_lock:
-                _gas_empty_cache.add(user_id)
-        else:
-            # GAS 回傳錯誤（驗證失敗、伺服器錯誤等）→ 不放入快取，下次仍可重試
-            # 常見原因：SERVER_KEY 未設定、GAS 尚未重新部署
-            logger.warning(f"[GAS] Auth/server error for userId={user_id}: "
-                           f"success={result.get('success')}, error={result.get('error', result.get('message', ''))}")
-    except Exception as e:
-        # timeout / 網路錯誤 → 不放入快取（下次仍會重試）
-        logger.warning(f"[GAS] Restore failed for userId={user_id}: {e} (will retry next time)")
-    return None
 
 # API: Login
 @app.route('/api/login', methods=['POST'])
@@ -729,67 +617,6 @@ def migrate_data(data):
 
     return data
 
-# 追蹤 GAS 還原狀態：in_progress=正在拉取, confirmed_empty=GAS 確認無資料
-_gas_restore_in_progress = set()   # 正在背景拉取中
-_gas_restore_confirmed_empty = set()  # GAS 已明確回覆此 userId 無備份
-_gas_restore_lock = threading.Lock()
-
-def _start_gas_restore_bg(user_id, file_path):
-    """背景拉 GAS 還原資料，拉到後寫入本機檔並通知前端。"""
-    with _gas_restore_lock:
-        if user_id in _gas_restore_confirmed_empty:
-            return  # 已確認無備份，不重複請求
-        if user_id in _gas_restore_in_progress:
-            return  # 已在拉取中
-        _gas_restore_in_progress.add(user_id)
-
-    def _restore():
-        try:
-            logger.info(f"[GAS/BG] Starting restoration thread for userId={user_id}, timeout=25s...")
-            restored = pull_from_gas(user_id, timeout=25)
-            logger.info(f"[GAS/BG] pull_from_gas returned: {type(restored).__name__} (has data: {bool(restored)})")
-            if restored:
-                _file_written = False
-                try:
-                    tmp_fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.tmp')
-                    with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
-                        json.dump(restored, f, ensure_ascii=False, indent=2)
-                    os.replace(tmp_path, file_path)
-                    _file_written = True
-                    # 檔案寫入成功後才更新快取，確保兩者一致
-                    _cache_set(user_id, restored)
-                    logger.info(f"[GAS/BG] Restored {user_id} to local file")
-                except Exception as e:
-                    logger.warning(f"[GAS/BG] Failed to write restored data: {e}")
-                    if not _file_written:
-                        try: os.unlink(tmp_path)
-                        except: pass
-                # 只有在檔案確實寫入成功後才通知前端（否則前端重新載入仍是空資料）
-                if _file_written:
-                    try:
-                        logger.info(f"[GAS/BG] ✅ EMITTING gas_restore_ready for userId={user_id} to room={user_id}")
-                        socketio.emit('gas_restore_ready', {'userId': user_id}, room=user_id)
-                        logger.info(f"[GAS/BG] gas_restore_ready emitted successfully")
-                    except Exception as e:
-                        logger.error(f"[GAS/BG] Failed to emit gas_restore_ready: {e}")
-                else:
-                    logger.warning(f"[GAS/BG] File write failed for {user_id}, NOT emitting gas_restore_ready")
-            else:
-                # pull_from_gas 回 None：可能是 GAS 確認無資料，或是 timeout
-                # _gas_empty_cache 有值代表 GAS 明確回覆無資料
-                with _gas_empty_cache_lock:
-                    if user_id in _gas_empty_cache:
-                        with _gas_restore_lock:
-                            _gas_restore_confirmed_empty.add(user_id)
-                        logger.info(f"[GAS/BG] No backup confirmed for {user_id}")
-                    else:
-                        logger.info(f"[GAS/BG] Pull failed/timeout for {user_id}, will retry")
-        finally:
-            with _gas_restore_lock:
-                _gas_restore_in_progress.discard(user_id)
-
-    threading.Thread(target=_restore, daemon=True, name=f"gas-restore-{user_id}").start()
-
 # API: Get Data
 @app.route('/api/data/<user_id>', methods=['GET'])
 def get_data(user_id):
@@ -810,114 +637,11 @@ def get_data(user_id):
             _cache_set(user_id, data)  # 寫入快取
             return jsonify({'success': True, 'data': data})
         else:
-            # 本機無資料 → 確認狀態
-            with _gas_restore_lock:
-                confirmed_empty = user_id in _gas_restore_confirmed_empty
-            if confirmed_empty:
-                # GAS 已確認此 userId 無備份，直接告知前端
-                return jsonify({'success': True, 'data': None, 'gasRestoreInProgress': False})
-            # 背景拉 GAS，先回傳 null 讓前端秒進
-            _start_gas_restore_bg(user_id, file_path)
-            return jsonify({'success': True, 'data': None, 'gasRestoreInProgress': True})
+            # 本機無資料 → 回傳 null
+            return jsonify({'success': True, 'data': None})
     except Exception as e:
         logger.error(f"Error reading data: {e}")
         return jsonify({'success': False, 'message': 'Internal Server Error'}), 500
-
-# API: Force GAS Restore（清除確認空快取，強制重新從 GAS 拉取）
-@app.route('/api/gas-restore-force/<user_id>', methods=['POST'])
-def gas_restore_force(user_id):
-    """手動強制重試 GAS 還原。清除 confirmed_empty / empty_cache，重啟背景拉取。"""
-    if not is_valid_user_id(user_id):
-        return jsonify({'success': False, 'message': 'Invalid user ID'}), 400
-    if not GAS_ENABLED:
-        return jsonify({'success': False, 'message': 'GAS not configured'}), 503
-
-    # 清除快取，允許重新從 GAS 拉取
-    with _gas_empty_cache_lock:
-        _gas_empty_cache.discard(user_id)
-    with _gas_restore_lock:
-        _gas_restore_confirmed_empty.discard(user_id)
-        _gas_restore_in_progress.discard(user_id)  # 若前次卡住，也一併清除
-
-    file_path = os.path.join(DATA_DIR, f"{user_id.strip()}.json")
-    _start_gas_restore_bg(user_id, file_path)
-    logger.info(f"[GAS/Force] Forced restore triggered for userId={user_id}")
-    return jsonify({'success': True, 'message': '已觸發強制 GAS 還原，請等待 gas_restore_ready 通知'})
-
-# API: GAS Diagnostic（直接查詢 GAS 並回傳原始結果，協助排查 SERVER_KEY / URL / 資料是否存在）
-@app.route('/api/gas-diagnose/<user_id>', methods=['GET'])
-def gas_diagnose(user_id):
-    """
-    診斷端點：繞過所有快取，直接同步呼叫 GAS，回傳原始 JSON 與 HTTP 狀態。
-    用法：瀏覽器開啟 https://your-render.app/api/gas-diagnose/Spe%20for%20u
-    可同時驗證：
-      1. GAS_WEBHOOK_URL 是否可達
-      2. GAS_SERVER_KEY 是否被 GAS 接受
-      3. 該 userId 在 GAS 上是否真的有資料
-    """
-    if not is_valid_user_id(user_id):
-        return jsonify({'ok': False, 'reason': 'Invalid user ID'}), 400
-
-    diag = {
-        'userId': user_id,
-        'gas_enabled': bool(GAS_ENABLED),
-        'gas_webhook_url_set': bool(GAS_WEBHOOK_URL),
-        'gas_server_key_set': bool(GAS_SERVER_KEY),
-        'gas_server_key_length': len(GAS_SERVER_KEY) if GAS_SERVER_KEY else 0,
-        'in_confirmed_empty': user_id in _gas_restore_confirmed_empty,
-        'in_empty_cache': user_id in _gas_empty_cache,
-        'in_progress': user_id in _gas_restore_in_progress,
-        'local_file_exists': os.path.exists(os.path.join(DATA_DIR, f"{user_id.strip()}.json")),
-        'cache_has_user': _cache_get(user_id) is not None,
-    }
-
-    if not GAS_ENABLED:
-        diag['gas_call'] = 'skipped (GAS_WEBHOOK_URL not set)'
-        return jsonify({'ok': False, 'diag': diag})
-
-    # 直接呼叫 GAS，拿回原始回應
-    try:
-        url = f"{GAS_WEBHOOK_URL}?userId={urllib.parse.quote(user_id)}"
-        if GAS_SERVER_KEY:
-            url += f"&serverKey={urllib.parse.quote(GAS_SERVER_KEY)}"
-        req = urllib.request.Request(url, headers={'User-Agent': GAS_USER_AGENT})
-        import time as _t_mod
-        t0 = _t_mod.time()
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            http_status = resp.getcode()
-            raw_body = resp.read().decode('utf-8', errors='replace')
-        diag['gas_http_status'] = http_status
-        diag['gas_elapsed_sec'] = round(_t_mod.time() - t0, 2)
-        diag['gas_raw_response'] = raw_body[:2000]  # 只顯示前 2000 字元避免過大
-        diag['gas_raw_truncated'] = len(raw_body) > 2000
-        try:
-            parsed = json.loads(raw_body)
-            diag['gas_parsed'] = {
-                'success': parsed.get('success'),
-                'status': parsed.get('status'),
-                'has_data': bool(parsed.get('data')),
-                'data_keys': list(parsed.get('data', {}).keys()) if isinstance(parsed.get('data'), dict) else None,
-                'error': parsed.get('error'),
-                'message': parsed.get('message'),
-            }
-            # 明確診斷結論
-            if parsed.get('success') and parsed.get('data'):
-                diag['conclusion'] = '✅ GAS 有資料且驗證通過。問題應在後端快取 — 可呼叫 POST /api/gas-restore-force/<userId> 強制重新載入。'
-            elif parsed.get('success') and not parsed.get('data'):
-                diag['conclusion'] = '⚠️ GAS 驗證通過但此 userId 無備份資料（data 為 null）。意味著資料從未成功推送到 GAS，或 userId 拼寫/大小寫不同。'
-            elif parsed.get('error') and '身分驗證' in str(parsed.get('error', '')):
-                diag['conclusion'] = '❌ GAS 驗證失敗！請檢查：(a) Render 環境變數 GAS_SERVER_KEY (b) GAS Script Properties 的 SERVER_KEY，兩者須完全一致。'
-            else:
-                diag['conclusion'] = f'❓ GAS 回傳未預期結果：{parsed}'
-        except Exception as parse_err:
-            diag['gas_parsed'] = None
-            diag['parse_error'] = str(parse_err)
-            diag['conclusion'] = '❌ GAS 回應無法解析為 JSON。可能是 GAS_WEBHOOK_URL 指向錯誤的 URL（例如 HTML 錯誤頁）。'
-        return jsonify({'ok': True, 'diag': diag})
-    except Exception as e:
-        diag['gas_call_error'] = str(e)
-        diag['conclusion'] = f'❌ 無法連線 GAS：{e}。可能是 URL 設定錯誤或 GAS 尚未部署。'
-        return jsonify({'ok': False, 'diag': diag})
 
 # API: Save Data
 @app.route('/api/data/<user_id>', methods=['POST'])
@@ -1025,10 +749,6 @@ def save_data(user_id):
             logger.info(f"Broadcasted update for room {user_id}")
         except Exception as e:
             logger.warning(f"Socket emit failed: {e}")
-
-        # 背景自動備份到 Google Sheets（非阻塞）
-        if GAS_ENABLED:
-            push_to_gas_async(user_id, new_data)
 
         return jsonify({'success': True, 'message': 'Data saved successfully', 'data': new_data})
     except Exception as e:
