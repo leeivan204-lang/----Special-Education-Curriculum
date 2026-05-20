@@ -243,18 +243,35 @@ def _release_lock_by_sid(sid):
     return affected
 
 def _idle_lock_sweeper():
-    """背景執行緒：定時釋放閒置超時的編輯者鎖。"""
+    """背景執行緒：定時釋放閒置超時的編輯者鎖 & 驗證 socket 是否仍活躍。"""
     while True:
         try:
             now = _time.time()
             expired = []
+            stale_sids = []
+
             for uid, lock in list(editor_locks.items()):
+                sid = lock.get('sid')
+
+                # 檢查 1: socket 是否仍然活躍
+                socket_active = any(sid in user_sockets.get(u, set()) for u in user_sockets)
+                if not socket_active:
+                    stale_sids.append((uid, sid, 'socket_disconnected'))
+                    expired.append(uid)
+                    continue
+
+                # 檢查 2: 閒置超時
                 if now - lock.get('last_activity', lock['since']) > EDITOR_IDLE_TIMEOUT:
                     expired.append(uid)
+                    stale_sids.append((uid, sid, 'idle_timeout'))
+
             for uid in expired:
                 lock = editor_locks.pop(uid, None)
-                logger.info(f"[EditorLock] Auto-released stale lock for {uid} (sid={lock['sid'] if lock else '?'})")
+                # 找出原因
+                reason = next((r for u, s, r in stale_sids if u == uid), 'unknown')
+                logger.info(f"[EditorLock] Auto-released lock for {uid} (sid={lock['sid'] if lock else '?'}, reason={reason})")
                 _broadcast_editor_state(uid)
+
         except Exception as e:
             logger.warning(f"Idle lock sweeper error: {e}")
         _time.sleep(30)
