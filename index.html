@@ -640,20 +640,20 @@
     </div>
 
     <!-- Portable Data Script (Optional, for folder copy transfer) -->
-    <!-- Socket.IO - Load from local backend first, fallback to CDN -->
-    <script src="/socket.io/socket.io.min.js"></script>
+    <!-- Socket.IO - CDN with fallback -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script>
-        // Fallback if local Socket.IO fails
+        // Ensure Socket.IO is loaded, retry if needed
         if (typeof io === 'undefined') {
+            console.warn('[Init] Socket.IO not loaded from CDN, attempting local fallback');
             var script = document.createElement('script');
-            script.src = 'https://cdn.socket.io/4.7.4/socket.io.min.js';
+            script.src = '/socket.io/socket.io.js';
             script.onerror = function() {
-                console.error('Failed to load Socket.IO from CDN');
+                console.error('[Init] Failed to load Socket.IO from both CDN and local');
             };
             document.head.appendChild(script);
         }
     </script>
-    <script src="data.js" onerror="this.remove()"></script>
     <script src="script.js?v=20260520a"></script>
     <script src="docx_export.js?v=20260421c"></script>
 </body>
