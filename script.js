@@ -548,7 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isEditor = (MY_ROLE === 'editor');
         const isPending = (MY_ROLE === null);
         const editorInfo = isPending
-            ? '⏳ 正在取得編輯權限...'
+            ? '正在編輯'
             : (isEditor
                 ? '✏️ 編輯模式'
                 : '👁️ 檢視模式');
