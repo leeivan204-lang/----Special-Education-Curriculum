@@ -313,7 +313,8 @@ document.addEventListener('DOMContentLoaded', () => {
      * 帶逾時的 fetch：超過 timeoutMs 毫秒自動 abort，回傳 null 而不拋例外。
      * 預設 8 秒，適合 Render 免費方案冷啟動場景。
      */
-    async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+        // 注：默認超時時間改為 15 秒，適應 Render 冷啟動延遲
         const controller = new AbortController();
         const tid = setTimeout(() => controller.abort(), timeoutMs);
         try {
@@ -334,9 +335,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const SOCKET_URL = (window.location.protocol === 'file:' || window.location.hostname === '')
         ? 'http://localhost:3000'
         : window.location.origin;
-    const socket = io(SOCKET_URL);
+
+    // Socket.IO 配置：增強重連機制，適應 Render 冷啟動延遲
+    const socket = io(SOCKET_URL, {
+        reconnection: true,
+        reconnectionDelay: 1000,           // 首次重連延遲（ms）
+        reconnectionDelayMax: 5000,        // 最大重連延遲（ms）
+        reconnectionAttempts: 10,          // 最多嘗試 10 次重連
+        transports: ['websocket', 'polling'],  // 優先 WebSocket，降級到 polling
+        timeout: 20000,                    // 連接超時時間（ms）
+        upgrade: true,                     // 允許協議升級
+    });
 
     socket.on('connect', () => {
+        console.log('[Socket.IO] ✅ 連接成功');
+        if (CURRENT_USER) {
+            socket.emit('join', { userId: CURRENT_USER });
+        }
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.warn(`[Socket.IO] ⚠️ 連接中斷：${reason}`);
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('[Socket.IO] ❌ 連接錯誤：', error);
+    });
+
+    socket.on('reconnect_attempt', () => {
+        console.log('[Socket.IO] 🔄 正在重新連接...');
+    });
+
+    socket.on('reconnect', () => {
+        console.log('[Socket.IO] ✅ 重新連接成功');
         if (CURRENT_USER) {
             socket.emit('join', { userId: CURRENT_USER });
         }
