@@ -261,72 +261,36 @@ async function runSyncTests() {
     assert(global.window.__TEST__.LAST_SYNCED_TIMESTAMP === 2000, 'Updated LAST_SYNCED_TIMESTAMP');
 
 
-    // Test 2: Local > Remote (Conflict -> Choose Local)
+    // Test 2: Local newer than server -> keep local data
+    // 新同步邏輯：不再使用 confirm 對話框，改以 lastSyncedTimestamp 比較。
+    // 當本機已確認同步時間明顯新於伺服器時，保留本機資料並於稍後補推。
     resetSyncState();
-    console.log("Test 2: Local > Remote (Conflict -> Choose Local)");
+    console.log("Test 2: Local newer than server -> keep local");
 
-    // Setup Local
+    // Setup Local: 本機有較新的已同步時間
     global.window.__TEST__.courses = [{ id: 2, name: 'LocalCourse' }];
-    localStorage.setItem('lastSavedTimestamp', 3000); // Newer than server (2000)
+    localStorage.setItem('lastSyncedTimestamp', '5000'); // > 伺服器(2000) + 2000 門檻
 
-    // Mock confirm to return TRUE (Choose Local)
-    global.confirm = () => true;
-
-    // Mock Save
-    let saveCalled = false;
-    const originalFetch = global.fetch;
     global.fetch = async (url, options) => {
-        if (url.includes('mock-gas')) return { ok: false, json: async () => null };
-        if (url.includes('/api/data/') && options && options.method === 'POST') {
-            saveCalled = true;
-            return { ok: true, json: async () => ({ success: true }) };
+        // 伺服器僅有較舊且為空的資料
+        if (url.includes('/api/data/') && (!options || options.method !== 'POST')) {
+            return {
+                ok: true,
+                json: async () => ({ success: true, data: { timestamp: 2000, courses: [] } })
+            };
         }
-        return originalFetch(url, options); // Reuse server=2000 mock
+        // 補推的 POST 儲存
+        return { ok: true, json: async () => ({ success: true }) };
     };
 
     await loadDataAndSync();
 
-    assert(saveCalled, 'Attempted to save local data to server');
+    const keptCourses = global.window.__TEST__.courses;
+    assert(keptCourses.length === 1 && keptCourses[0].name === 'LocalCourse',
+        'Kept local data when local is newer than server');
 
 
-    // Test 3: Cloud > Server (Cloud Restore)
-    resetSyncState();
-    console.log("Test 3: Cloud > Server");
-
-    // Mock Fetch
-    global.GAS_API_URL = 'http://mock-gas';
-    global.fetch = async (url) => {
-        if (url.includes('mock-gas')) {
-            return {
-                ok: true,
-                json: async () => ({
-                    // Cloud API response structure
-                    data: {
-                        timestamp: 5000,
-                        courses: [{ id: 3, name: 'CloudCourse' }]
-                    }
-                })
-            };
-        }
-        if (url.includes('/api/data/')) {
-            return {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    data: { timestamp: 2000, courses: [] }
-                })
-            };
-        }
-        return { ok: true, json: async () => ({ success: true }) }; // For save calls
-    };
-
-    // Confirm Cloud Import
-    global.confirm = () => true;
-
-    await loadDataAndSync();
-
-    const cloudCourses = global.window.__TEST__.courses;
-    assert(cloudCourses.length === 1 && cloudCourses[0].name === 'CloudCourse', 'Loaded cloud data');
+    // (已移除) 舊 Test 3: Cloud > Server —— GAS 雲端還原功能已自系統移除
 
     // Test 4: Restore Data (restoreData)
     resetSyncState();

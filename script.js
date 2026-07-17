@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only initialize DOM in production/browser environment
     if (!isTestEnvironment) {
         // --- 版本資訊 ---
-        const VERSION_NUMBER = '2026.05.20b';
+        const VERSION_NUMBER = '2026.07.18a';
         const VERSION_DATE = 'May 20, 2026';  // 自動更新日期
 
         // 初始化版本號顯示
@@ -5904,25 +5904,57 @@ document.addEventListener('DOMContentLoaded', () => {
     window.exportMasterScheduleWord = async function () {
         const btn = document.getElementById('btn-export-master-schedule-word');
         const originalText = btn.textContent;
-        btn.textContent = '⏳ 處理中...';
+        btn.textContent = '⏳  處理中...';
         btn.disabled = true;
 
         try {
             const scheduleType = document.getElementById('schedule-type-select').value;
             console.log('Exporting schedule type:', scheduleType);
 
-            // 1. Check for unsupported types (Master, Classroom Integrated, Classroom)
-            if (scheduleType === 'master' || scheduleType === 'classroom_integrated' || scheduleType === 'classroom') {
-                showSnackbar('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
-                return;
-            }
+            // 1. Delegate to specific functions for supported types
+            if (scheduleType === 'master' || scheduleType === 'classroom_integrated') {
+                // 準備數據（自輸入欄位讀取標題，與畫面顯示一致）
+                const data = {
+                    isClassroomIntegrated: scheduleType === 'classroom_integrated',
+                    prefix: document.getElementById('title-prefix')?.value || scheduleTitle?.prefix || '',
+                    year: document.getElementById('title-year')?.value || scheduleTitle?.year || '',
+                    semester: document.getElementById('title-semester')?.value || scheduleTitle?.semester || '',
+                    courses: courses,
+                    scheduleData: scheduleData,
+                    students: students,
+                    assignments: assignments,
+                    slotOverrides: slotOverrides,
+                    timeSlots: getCommonTimeSlots(),
+                    implementationDates: implementationDates,
+                    madeDate: (() => {
+                        const t = new Date();
+                        const roc = t.getFullYear() - 1911;
+                        const mm = String(t.getMonth() + 1).padStart(2, '0');
+                        const dd = String(t.getDate()).padStart(2, '0');
+                        return `${roc}. ${mm}. ${dd}`;
+                    })()
+                };
 
-            // 2. Delegate to specific functions for supported types
-            if (scheduleType === 'teacher') {
+                await window.generateWordMasterScheduleJS(data);
+                return;
+            } else if (scheduleType === 'teacher') {
                 await window.exportTeacherScheduleWord(btn);
                 return;
             } else if (scheduleType === 'student') {
                 await window.exportStudentScheduleWord(btn);
+                return;
+            } else if (scheduleType === 'classroom') {
+                // 準備教室課表數據
+                const data = {
+                    prefix: document.getElementById('title-prefix')?.value || scheduleTitle?.prefix || '',
+                    year: document.getElementById('title-year')?.value || scheduleTitle?.year || '',
+                    semester: document.getElementById('title-semester')?.value || scheduleTitle?.semester || '',
+                    courses: courses,
+                    scheduleData: scheduleData,
+                    timeSlots: getCommonTimeSlots()
+                };
+
+                await window.generateWordClassroomScheduleJS(data);
                 return;
             }
 
