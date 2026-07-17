@@ -573,3 +573,210 @@ window.generateWordClassroomScheduleJS = async function (data) {
     const buffer = await Packer.toBlob(doc);
     saveAs(buffer, `classrooms_schedule.docx`);
 };
+
+// 生成總課表 Word 匯出（主課表 + 學生分組名單）
+window.generateWordMasterScheduleJS = async function (data) {
+    const titleText = data.title || '總課表';
+    const prefix = data.prefix || '';
+    const year = data.year || new Date().getFullYear();
+    const semester = data.semester || '第一學期';
+    const suffix = data.suffix || '';
+    const courses = data.courses || [];
+    const scheduleData = data.scheduleData || {};
+    const students = data.students || [];
+    const teachers = data.teachers || [];
+    const implementationDates = data.implementationDates || {};
+
+    // 列寬設定 (星期一至星期五 + 時間 + 節次)
+    const colWidths = [
+        Math.round(3.1 * CM_TO_TWIP),  // 星期一
+        Math.round(3.1 * CM_TO_TWIP),  // 星期二
+        Math.round(3.1 * CM_TO_TWIP),  // 星期三
+        Math.round(3.1 * CM_TO_TWIP),  // 星期四
+        Math.round(3.1 * CM_TO_TWIP),  // 星期五
+        Math.round(1.5 * CM_TO_TWIP),  // 時間
+        Math.round(1.5 * CM_TO_TWIP)   // 節次
+    ];
+
+    const tableRows = [];
+
+    // 表格標題行
+    tableRows.push(new TableRow({
+        children: [
+            createCenteredCell("星期一", colWidths[0], { bold: true, fontSize: 12 }),
+            createCenteredCell("星期二", colWidths[1], { bold: true, fontSize: 12 }),
+            createCenteredCell("星期三", colWidths[2], { bold: true, fontSize: 12 }),
+            createCenteredCell("星期四", colWidths[3], { bold: true, fontSize: 12 }),
+            createCenteredCell("星期五", colWidths[4], { bold: true, fontSize: 12 }),
+            createCenteredCell("時間", colWidths[5], { bold: true, fontSize: 12 }),
+            createCenteredCell("節次", colWidths[6], { bold: true, fontSize: 12 }),
+        ]
+    }));
+
+    // 處理課表數據行
+    const timeSlots = scheduleData.time_slots || [];
+    timeSlots.forEach((slot, slotIndex) => {
+        const height = slot.is_lunch ? 700 : 800;
+        const trChildren = [];
+
+        if (slot.is_lunch) {
+            // 午休：合併前5格
+            const mergeWidth = colWidths.slice(0, 5).reduce((a, b) => a + b, 0);
+            trChildren.push(createCenteredCell("午休", mergeWidth, { colSpan: 5, fontSize: 14 }));
+            trChildren.push(createCenteredCell(slot.time || '', colWidths[5], { fontSize: 12 }));
+            trChildren.push(createCenteredCell("", colWidths[6], { fontSize: 12 }));
+        } else {
+            // 標準課程行
+            const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+            dayKeys.forEach((dayKey, dayIdx) => {
+                const coursesInSlot = scheduleData.courses?.[slotIndex]?.[dayKey] || [];
+                let cellContent = '';
+
+                if (Array.isArray(coursesInSlot)) {
+                    // 多課程：用換行符分隔
+                    cellContent = coursesInSlot.map(course => {
+                        const courseName = course.name || '';
+                        const teacherName = course.teacher ? ` / ${course.teacher}` : '';
+                        const roomName = course.room ? ` / ${course.room}` : '';
+                        const groupName = course.groups ? ` (${course.groups})` : '';
+                        return `${courseName}${teacherName}${roomName}${groupName}`;
+                    }).join('\n');
+                } else if (typeof coursesInSlot === 'string') {
+                    cellContent = coursesInSlot;
+                }
+
+                trChildren.push(createCenteredCell(cellContent, colWidths[dayIdx], { fontSize: 11 }));
+            });
+
+            // 時間和節次
+            trChildren.push(createCenteredCell(slot.time || '', colWidths[5], { fontSize: 12 }));
+            trChildren.push(createCenteredCell(slot.name || '', colWidths[6], { fontSize: 12 }));
+        }
+
+        tableRows.push(new TableRow({
+            height: { value: height, rule: HeightRule.AT_LEAST },
+            children: trChildren
+        }));
+    });
+
+    // 準備學生分組名單
+    const groupingTableRows = [];
+    groupingTableRows.push(new TableRow({
+        children: [
+            createCenteredCell("課程", 5000, { bold: true, fontSize: 12 }),
+            createCenteredCell("分組名單", 7000, { bold: true, fontSize: 12 })
+        ]
+    }));
+
+    // 為每個課程生成分組名單行
+    courses.forEach(course => {
+        const courseName = course.name || '';
+        const groups = course.groups || [];
+        let groupList = '';
+
+        if (Array.isArray(groups) && groups.length > 0) {
+            groupList = groups.map(group => {
+                const groupName = group.name || '';
+                const studentNames = group.students?.map(sid => {
+                    const student = students.find(s => s.id === sid);
+                    return student?.name || sid;
+                }).join('、') || '';
+                return `${groupName}：${studentNames}`;
+            }).join('\n');
+        }
+
+        groupingTableRows.push(new TableRow({
+            children: [
+                createCenteredCell(courseName, 5000, { fontSize: 11 }),
+                createCenteredCell(groupList, 7000, { fontSize: 11 })
+            ]
+        }));
+    });
+
+    // 組織文件結構
+    const dateRange = implementationDates?.start && implementationDates?.end
+        ? `${implementationDates.start} ～ ${implementationDates.end}`
+        : '';
+
+    const doc = new Document({
+        sections: [{
+            properties: {
+                page: {
+                    margin: {
+                        top: Math.round(1.27 * CM_TO_TWIP),
+                        bottom: Math.round(1.27 * CM_TO_TWIP),
+                        left: Math.round(1.27 * CM_TO_TWIP),
+                        right: Math.round(1.27 * CM_TO_TWIP),
+                    }
+                }
+            },
+            children: [
+                // 標題
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    heading: HeadingLevel.TITLE,
+                    children: [
+                        new TextRun({
+                            text: titleText,
+                            font: "標楷體",
+                            size: 40,
+                            bold: true
+                        })
+                    ]
+                }),
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 120, after: 120 },
+                    children: [
+                        new TextRun({
+                            text: `${prefix} ${year} 年 ${semester} ${suffix}`,
+                            font: "標楷體",
+                            size: 24
+                        })
+                    ]
+                }),
+                new Paragraph({ text: "" }),
+
+                // 主課表
+                new Table({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    rows: tableRows
+                }),
+
+                new Paragraph({
+                    spacing: { before: 240, after: 120 },
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                        new TextRun({
+                            text: dateRange ? `實施日期 ${dateRange}` : '',
+                            font: "Times New Roman",
+                            size: 24
+                        })
+                    ]
+                }),
+
+                // 學生分組名單表格
+                new Paragraph({
+                    spacing: { before: 240, after: 120 },
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                        new TextRun({
+                            text: "學生分組名單",
+                            font: "標楷體",
+                            size: 28,
+                            bold: true
+                        })
+                    ]
+                }),
+
+                new Table({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    rows: groupingTableRows
+                })
+            ]
+        }]
+    });
+
+    const buffer = await Packer.toBlob(doc);
+    saveAs(buffer, `${titleText}.docx`);
+};

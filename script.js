@@ -5904,25 +5904,40 @@ document.addEventListener('DOMContentLoaded', () => {
     window.exportMasterScheduleWord = async function () {
         const btn = document.getElementById('btn-export-master-schedule-word');
         const originalText = btn.textContent;
-        btn.textContent = '⏳ 處理中...';
+        btn.textContent = '⏳  處理中...';
         btn.disabled = true;
 
         try {
             const scheduleType = document.getElementById('schedule-type-select').value;
             console.log('Exporting schedule type:', scheduleType);
 
-            // 1. Check for unsupported types (Master, Classroom Integrated, Classroom)
-            if (scheduleType === 'master' || scheduleType === 'classroom_integrated' || scheduleType === 'classroom') {
-                showSnackbar('目前無此功能，僅提供匯出「簡易課表」、「教師課表(個別)」、「學生課表(個別)」');
-                return;
-            }
+            // 1. Delegate to specific functions for supported types
+            if (scheduleType === 'master' || scheduleType === 'classroom_integrated') {
+                // 準備數據
+                const data = {
+                    title: scheduleTitle?.prefix || '課表',
+                    prefix: scheduleTitle?.prefix || '',
+                    year: scheduleTitle?.year || new Date().getFullYear(),
+                    semester: scheduleTitle?.semester || '第一學期',
+                    suffix: scheduleTitle?.suffix || '',
+                    courses: courses,
+                    scheduleData: scheduleData,
+                    students: students,
+                    teachers: teachers,
+                    implementationDates: implementationDates,
+                    timestamp: new Date().getTime()
+                };
 
-            // 2. Delegate to specific functions for supported types
-            if (scheduleType === 'teacher') {
+                await window.generateWordMasterScheduleJS(data);
+                return;
+            } else if (scheduleType === 'teacher') {
                 await window.exportTeacherScheduleWord(btn);
                 return;
             } else if (scheduleType === 'student') {
                 await window.exportStudentScheduleWord(btn);
+                return;
+            } else if (scheduleType === 'classroom') {
+                showSnackbar('教室課表匯出功能準備中...');
                 return;
             }
 
