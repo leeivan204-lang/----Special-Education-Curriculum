@@ -780,3 +780,157 @@ window.generateWordMasterScheduleJS = async function (data) {
     const buffer = await Packer.toBlob(doc);
     saveAs(buffer, `${titleText}.docx`);
 };
+
+// 生成教室課表 Word 匯出（按教室分組）
+window.generateWordClassroomScheduleJS = async function (data) {
+    const titlePrefix = data.prefix || '';
+    const year = data.year || new Date().getFullYear();
+    const semester = data.semester || '第一學期';
+    const courses = data.courses || [];
+    const scheduleData = data.scheduleData || {};
+    const timeSlots = data.timeSlots || [];
+
+    // 列寬設定 (星期五到星期一 + 時間 + 節次)
+    const colWidths = [
+        Math.round(2.5 * CM_TO_TWIP),  // 星期五
+        Math.round(2.5 * CM_TO_TWIP),  // 星期四
+        Math.round(2.5 * CM_TO_TWIP),  // 星期三
+        Math.round(2.5 * CM_TO_TWIP),  // 星期二
+        Math.round(2.5 * CM_TO_TWIP),  // 星期一
+        Math.round(2.0 * CM_TO_TWIP)   // 時間/節次
+    ];
+
+    // 收集所有唯一的教室
+    const rooms = new Set();
+    courses.forEach(c => {
+        if (c.groupDetails) {
+            Object.values(c.groupDetails).forEach(d => {
+                const effectiveRoom = d.displayRoom || d.room;
+                if (effectiveRoom) rooms.add(effectiveRoom);
+            });
+        }
+    });
+
+    if (rooms.size === 0) {
+        showSnackbar('尚無教室資料');
+        return;
+    }
+
+    const sortedRooms = Array.from(rooms).sort();
+    const weekdaysKeys = ['friday', 'thursday', 'wednesday', 'tuesday', 'monday'];
+    const weekdaysNames = ['星期五', '星期四', '星期三', '星期二', '星期一'];
+
+    // 為每個教室生成一頁文件
+    const sections = [];
+
+    sortedRooms.forEach((room, roomIndex) => {
+        const tableRows = [];
+
+        // 表格標題行
+        tableRows.push(new TableRow({
+            children: [
+                createCenteredCell("星期五", colWidths[0], { bold: true, fontSize: 12 }),
+                createCenteredCell("星期四", colWidths[1], { bold: true, fontSize: 12 }),
+                createCenteredCell("星期三", colWidths[2], { bold: true, fontSize: 12 }),
+                createCenteredCell("星期二", colWidths[3], { bold: true, fontSize: 12 }),
+                createCenteredCell("星期一", colWidths[4], { bold: true, fontSize: 12 }),
+                createCenteredCell("時間/節次", colWidths[5], { bold: true, fontSize: 11 }),
+            ]
+        }));
+
+        // 處理每個時間段
+        timeSlots.forEach(slot => {
+            if (slot.isSpecial) return; // 跳過特殊時段（早自習、午休）
+
+            const trChildren = [];
+
+            // 星期五到星期一（逆序）
+            weekdaysKeys.forEach((dayKey, dayIdx) => {
+                const slotKey = `${dayKey}-${slot.period}`;
+                const blocks = scheduleData[slotKey] || [];
+                let cellContent = '';
+
+                if (Array.isArray(blocks)) {
+                    const roomBlocks = [];
+                    blocks.forEach(block => {
+                        const course = courses.find(c => c.id === block.courseId);
+                        if (!course) return;
+
+                        course.groups.forEach(groupName => {
+                            const details = course.groupDetails[groupName];
+                            if (!details) return;
+
+                            const effectiveRoom = details.displayRoom || details.room;
+                            if (effectiveRoom === room) {
+                                const courseName = course.name || '';
+                                const teacherName = Array.isArray(details.teacher)
+                                    ? details.teacher.join('、')
+                                    : (details.teacher || '');
+
+                                roomBlocks.push(`${courseName}\n${teacherName}`);
+                            }
+                        });
+                    });
+                    cellContent = roomBlocks.join('\n---\n');
+                }
+
+                trChildren.push(createCenteredCell(cellContent, colWidths[dayIdx], { fontSize: 11 }));
+            });
+
+            // 時間/節次
+            const sectionNum = slot.name.replace('第', '').replace('節', '');
+            const timeStr = slot.time ? slot.time.replace('~', '\n|\n') : '';
+            const timeCell = `第${sectionNum}節\n${timeStr}`;
+            trChildren.push(createCenteredCell(timeCell, colWidths[5], { fontSize: 10 }));
+
+            tableRows.push(new TableRow({
+                height: { value: 800, rule: HeightRule.AT_LEAST },
+                children: trChildren
+            }));
+        });
+
+        // 為每個教室創建一個章節
+        const roomTitle = `${titlePrefix} ${year} 學年度第 ${semester} 學期 ${room} 課表`;
+        const pageBreak = roomIndex > 0 ? [new Paragraph({ pageBreakBefore: true })] : [];
+
+        sections.push(...pageBreak);
+        sections.push(
+            new Paragraph({
+                alignment: AlignmentType.CENTER,
+                heading: HeadingLevel.TITLE,
+                children: [
+                    new TextRun({
+                        text: roomTitle,
+                        font: "標楷體",
+                        size: 36,
+                        bold: true
+                    })
+                ]
+            }),
+            new Paragraph({ text: "" }),
+            new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: tableRows
+            })
+        );
+    });
+
+    const doc = new Document({
+        sections: [{
+            properties: {
+                page: {
+                    margin: {
+                        top: Math.round(1.27 * CM_TO_TWIP),
+                        bottom: Math.round(1.27 * CM_TO_TWIP),
+                        left: Math.round(1.27 * CM_TO_TWIP),
+                        right: Math.round(1.27 * CM_TO_TWIP),
+                    }
+                }
+            },
+            children: sections
+        }]
+    });
+
+    const buffer = await Packer.toBlob(doc);
+    saveAs(buffer, `${titlePrefix || '教室課表'}.docx`);
+};

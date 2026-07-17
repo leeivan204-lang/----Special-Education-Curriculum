@@ -5937,7 +5937,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 await window.exportStudentScheduleWord(btn);
                 return;
             } else if (scheduleType === 'classroom') {
-                showSnackbar('教室課表匯出功能準備中...');
+                // 準備教室課表數據
+                const data = {
+                    prefix: scheduleTitle?.prefix || '',
+                    year: scheduleTitle?.year || new Date().getFullYear(),
+                    semester: scheduleTitle?.semester || '第一學期',
+                    courses: courses,
+                    scheduleData: scheduleData,
+                    timeSlots: getCommonTimeSlots()
+                };
+
+                await window.generateWordClassroomScheduleJS(data);
                 return;
             }
 
