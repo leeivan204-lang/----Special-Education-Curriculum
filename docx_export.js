@@ -599,16 +599,18 @@ window.generateWordMasterScheduleJS = async function (data) {
     const titleSuffix = isClassroomIntegrated ? '教室統整課表' : '總課表';
     const titleText = `${prefix} ${year} 學年度第 ${semester} 學期 ${titleSuffix}`.trim();
 
-    // 時段定義（與 getCommonTimeSlots 一致）；特殊時段 (早自習/午休) 不輸出
-    const timeSlots = (data.timeSlots || [
+    // 時段定義（與 getCommonTimeSlots 一致，含早自習與中午特殊時段）
+    const timeSlots = data.timeSlots || [
+        { period: 'morning', name: '早自習', time: '', isSpecial: true },
         { period: '1', name: '第一節', time: '08:30~09:15' },
         { period: '2', name: '第二節', time: '09:25~10:10' },
         { period: '3', name: '第三節', time: '10:20~11:05' },
         { period: '4', name: '第四節', time: '11:15~12:00' },
+        { period: 'lunch', name: '中午', time: '12:30~13:10', isSpecial: true },
         { period: '5', name: '第五節', time: '13:20~14:05' },
         { period: '6', name: '第六節', time: '14:15~15:00' },
         { period: '7', name: '第七節', time: '15:20~16:05' }
-    ]).filter(s => !s.isSpecial);
+    ];
 
     // 星期反序 (星期五 → 星期一)，節次欄在最右
     const daysReversed = [
@@ -741,7 +743,7 @@ window.generateWordMasterScheduleJS = async function (data) {
             });
         }
 
-        // 多個分組：巢狀 2 欄表格
+        // 多個分組：巢狀 2 欄表格，格內以虛線十字分隔各分組
         const halfWidth = Math.round(dayWidth / 2);
         const nestedRows = [];
         for (let i = 0; i < items.length; i += 2) {
@@ -750,14 +752,12 @@ window.generateWordMasterScheduleJS = async function (data) {
                 width: { size: halfWidth, type: WidthType.DXA },
                 verticalAlign: VerticalAlign.TOP,
                 margins: { top: 20, bottom: 20, left: 20, right: 20 },
-                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: dashBorder },
                 children: groupBlockParagraphs(slotKey, course, groupName, false)
             }));
             // 補足第二欄 (使該列維持 2 欄)
             if (cells.length === 1) {
                 cells.push(new TableCell({
                     width: { size: halfWidth, type: WidthType.DXA },
-                    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
                     children: [P('', { size: 10 })]
                 }));
             }
@@ -768,7 +768,7 @@ window.generateWordMasterScheduleJS = async function (data) {
             width: { size: dayWidth, type: WidthType.DXA },
             borders: {
                 top: noBorder, bottom: noBorder, left: noBorder, right: noBorder,
-                insideHorizontal: noBorder, insideVertical: noBorder
+                insideHorizontal: dashBorder, insideVertical: dashBorder
             },
             rows: nestedRows
         });
@@ -794,6 +794,34 @@ window.generateWordMasterScheduleJS = async function (data) {
 
     // 每節一列
     timeSlots.forEach(slot => {
+        if (slot.isSpecial) {
+            // 特殊時段（早自習、中午）：五個星期欄合併為灰底提示，節次欄顯示名稱與時間
+            const mergeWidth = dayWidth * 5;
+            const mergedCell = new TableCell({
+                width: { size: mergeWidth, type: WidthType.DXA },
+                columnSpan: 5,
+                verticalAlign: VerticalAlign.CENTER,
+                shading: { fill: "F2F2F2" },
+                children: [P(`${slot.name}時段`, { size: 11, font: "標楷體" })]
+            });
+
+            const specialPeriodParas = [P(slot.name, { size: 11, bold: true })];
+            if (slot.time) {
+                specialPeriodParas.push(P(String(slot.time).replace('~', '～').replace(/:/g, '：'), { size: 9 }));
+            }
+            const specialPeriodCell = new TableCell({
+                width: { size: periodWidth, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                children: specialPeriodParas
+            });
+
+            tableRows.push(new TableRow({
+                height: { value: 500, rule: HeightRule.AT_LEAST },
+                children: [mergedCell, specialPeriodCell]
+            }));
+            return;
+        }
+
         const dayCells = daysReversed.map((d, idx) => buildDayCell(`${d.key}-${slot.period}`, idx));
 
         // 節次/時間欄 (最右)：第 N 節 / 起 / / / 迄
