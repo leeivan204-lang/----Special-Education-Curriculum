@@ -19,17 +19,23 @@
 ## [2026.07.17a] - 2026-07-17
 
 ### 新增
-- ✨ **總課表 Word 匯出功能**
+- ✨ **總課表及教室課表 Word 匯出功能**
   - 新增 `generateWordMasterScheduleJS()` 函數於 `docx_export.js`
-  - 支援「總課表」和「教室統整課表」的 Word 匯出
-  - 課程表包含課程名、教師、教室、分組資訊
-  - 支援多課程單元格（用換行符分隔）
-  - 包含學生分組名單表格
+    - 支援「總課表」和「教室統整課表」的 Word 匯出
+    - 課程表包含課程名、教師、教室、分組資訊
+    - 支援多課程單元格（用換行符分隔）
+    - 包含學生分組名單表格
+  - 新增 `generateWordClassroomScheduleJS()` 函數於 `docx_export.js`
+    - 支援「教室課表 (個別)」的 Word 匯出
+    - 按教室分組，每個教室一頁
+    - 顯示各教室的課程與教師資訊
+    - 支援多個教室的自動頁面分割
   - 格式與 PDF 匯出保持一致
 
 ### 變更
 - 修改 `exportMasterScheduleWord()` 啟用新的 Word 匯出功能
-- 移除「無此功能」提示訊息（'master' 和 'classroom_integrated' 類型）
+- 移除「無此功能」提示訊息（'master'、'classroom_integrated' 和 'classroom' 類型）
+- 為所有課表類型整合 Word 匯出功能
 
 ---
 
