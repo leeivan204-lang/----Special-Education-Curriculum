@@ -47,9 +47,9 @@
 - 📝 重寫 `README.md`：更新版本、功能（六種課表 Word 匯出）、修正失效文件連結
 - 📝 更新版本號至 `2026.07.18a`（`script.js`、`index.html`、快取字串 `?v=`）
 
-### 已知問題
-- ⚠️ `docx_export.js` 有一組重複的 `generateWordClassroomScheduleJS`（舊版被覆蓋成死碼），
-  連同未綁定的 `exportClassroomScheduleWord`，待清理（不影響功能）
+### 清理
+- 🧹 移除重複的 `generateWordClassroomScheduleJS`（舊版死碼）與未綁定的 `exportClassroomScheduleWord`
+- 🔀 分支與 `main` 同步（併入 b09e7dd）
 
 ---
 

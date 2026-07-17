@@ -122,11 +122,8 @@ POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
 | 簡易課表 | `generateWordScheduleJS` | 52 |
 | 教師課表 (個別) | `generateWordTeacherScheduleJS` | 165 |
 | 學生課表 (個別) | `generateWordStudentScheduleJS` | 343 |
-| **總課表 / 教室統整課表** | `generateWordMasterScheduleJS` | 587 |
-| **教室課表 (個別)** | `generateWordClassroomScheduleJS` | 947 |
-
-> ⚠️ 已知：`docx_export.js` 第 500 行有一個同名 `generateWordClassroomScheduleJS` 舊定義，
-> 被第 947 行覆蓋，屬死碼（連同 script.js 的 `exportClassroomScheduleWord`），待清理。
+| **總課表 / 教室統整課表** | `generateWordMasterScheduleJS` | 509 |
+| **教室課表 (個別)** | `generateWordClassroomScheduleJS` | 869 |
 
 **總課表 Word 版面重點**（`generateWordMasterScheduleJS`，對照列印/PDF）:
 - 橫向 A4（`PageOrientation.LANDSCAPE`）
