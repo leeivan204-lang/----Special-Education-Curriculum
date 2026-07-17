@@ -574,129 +574,222 @@ window.generateWordClassroomScheduleJS = async function (data) {
     saveAs(buffer, `classrooms_schedule.docx`);
 };
 
-// 生成總課表 Word 匯出（主課表 + 學生分組名單）
+// 生成總課表 / 教室統整課表 Word 匯出
+// 資料模型與 script.js 的 renderMasterSchedule() 一致：
+//   scheduleData: { '{day}-{period}': [{ courseId }, ...] }  (扁平物件)
+//   course: { id, name, groups: [名稱字串], groupDetails: { [名稱]: { teacher: [], room, displayRoom } } }
+//   assignments: { [courseId]: { [分組名稱]: [studentId, ...] } }
+//   slotOverrides: { [slotKey]: { [courseId]: { [分組名稱]: delta | 陣列 } } }
 window.generateWordMasterScheduleJS = async function (data) {
-    const titleText = data.title || '總課表';
+    const isClassroomIntegrated = !!data.isClassroomIntegrated;
     const prefix = data.prefix || '';
-    const year = data.year || new Date().getFullYear();
-    const semester = data.semester || '第一學期';
-    const suffix = data.suffix || '';
+    const year = data.year || '';
+    const semester = data.semester || '';
     const courses = data.courses || [];
     const scheduleData = data.scheduleData || {};
     const students = data.students || [];
-    const teachers = data.teachers || [];
+    const assignments = data.assignments || {};
+    const slotOverrides = data.slotOverrides || {};
     const implementationDates = data.implementationDates || {};
 
-    // 列寬設定 (星期一至星期五 + 時間 + 節次)
-    const colWidths = [
-        Math.round(3.1 * CM_TO_TWIP),  // 星期一
-        Math.round(3.1 * CM_TO_TWIP),  // 星期二
-        Math.round(3.1 * CM_TO_TWIP),  // 星期三
-        Math.round(3.1 * CM_TO_TWIP),  // 星期四
-        Math.round(3.1 * CM_TO_TWIP),  // 星期五
-        Math.round(1.5 * CM_TO_TWIP),  // 時間
-        Math.round(1.5 * CM_TO_TWIP)   // 節次
+    const titleSuffix = isClassroomIntegrated ? '教室統整課表' : '總課表';
+    const titleText = `${prefix} ${year} 學年度第 ${semester} 學期 ${titleSuffix}`.trim();
+
+    // 時段定義（與 getCommonTimeSlots 一致）
+    const timeSlots = data.timeSlots || [
+        { period: 'morning', name: '早自習', time: '', isSpecial: true },
+        { period: '1', name: '第一節', time: '08:30~09:15' },
+        { period: '2', name: '第二節', time: '09:25~10:10' },
+        { period: '3', name: '第三節', time: '10:20~11:05' },
+        { period: '4', name: '第四節', time: '11:15~12:00' },
+        { period: 'lunch', name: '中午', time: '12:30~13:10', isSpecial: true },
+        { period: '5', name: '第五節', time: '13:20~14:05' },
+        { period: '6', name: '第六節', time: '14:15~15:00' },
+        { period: '7', name: '第七節', time: '15:20~16:05' }
     ];
+
+    const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    const dayNames = ['星期一', '星期二', '星期三', '星期四', '星期五'];
+
+    // 列寬設定 (節次 + 星期一至星期五)
+    const periodWidth = Math.round(2.0 * CM_TO_TWIP);
+    const dayWidth = Math.round(3.4 * CM_TO_TWIP);
+    const colWidths = [periodWidth, dayWidth, dayWidth, dayWidth, dayWidth, dayWidth];
+
+    // 計算某分組在某時段的學生名單（套用 override）
+    const getGroupStudents = (slotKey, courseId, groupName) => {
+        let groupStudents = (assignments[courseId] && assignments[courseId][groupName]) || [];
+        const override = slotOverrides[slotKey] && slotOverrides[slotKey][courseId] && slotOverrides[slotKey][courseId][groupName];
+        if (override) {
+            if (Array.isArray(override)) {
+                groupStudents = override;
+            } else if (override.type === 'delta') {
+                groupStudents = groupStudents.filter(sid => !(override.removed || []).includes(sid));
+                (override.added || []).forEach(sid => {
+                    if (!groupStudents.includes(sid)) groupStudents.push(sid);
+                });
+            }
+        }
+        return groupStudents;
+    };
+
+    // 建立單一單元格的文字內容
+    const buildCellText = (slotKey) => {
+        const blocks = scheduleData[slotKey];
+        if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return '';
+
+        const renderItems = [];
+        blocks.forEach(block => {
+            const course = courses.find(c => c.id === block.courseId);
+            if (course && Array.isArray(course.groups)) {
+                course.groups.forEach(groupName => {
+                    renderItems.push({ course, groupName });
+                });
+            }
+        });
+
+        renderItems.sort((a, b) => a.groupName.localeCompare(b.groupName, 'zh-TW'));
+
+        const blockTexts = renderItems.map(({ course, groupName }) => {
+            const details = (course.groupDetails && course.groupDetails[groupName]) || {};
+
+            // 教師
+            const teacherData = details.teacher;
+            let teacherDisplay = '未排';
+            if (Array.isArray(teacherData)) {
+                teacherDisplay = teacherData.filter(t => t && t !== '').join('、') || '未排';
+            } else if (teacherData) {
+                teacherDisplay = teacherData;
+            }
+
+            // 課程名 + 分組名（若分組名與課程名相同則省略）
+            const headerName = (groupName === course.name) ? course.name : `${course.name} ${groupName}`;
+
+            const lines = [headerName, `👨‍🏫 ${teacherDisplay}`, `🏠 ${details.room || '待訂'}`];
+
+            // 一般總課表：附上學生名單
+            if (!isClassroomIntegrated) {
+                const groupStudents = getGroupStudents(slotKey, course.id, groupName);
+                const studentNames = groupStudents.map(sid => {
+                    const student = students.find(s => s.id === sid);
+                    return student ? `${student.grade} ${student.name}` : '';
+                }).filter(Boolean);
+                if (studentNames.length > 0) {
+                    lines.push(studentNames.join('、'));
+                }
+            }
+
+            return lines.join('\n');
+        });
+
+        return blockTexts.join('\n──\n');
+    };
 
     const tableRows = [];
 
     // 表格標題行
     tableRows.push(new TableRow({
+        tableHeader: true,
         children: [
-            createCenteredCell("星期一", colWidths[0], { bold: true, fontSize: 12 }),
-            createCenteredCell("星期二", colWidths[1], { bold: true, fontSize: 12 }),
-            createCenteredCell("星期三", colWidths[2], { bold: true, fontSize: 12 }),
-            createCenteredCell("星期四", colWidths[3], { bold: true, fontSize: 12 }),
-            createCenteredCell("星期五", colWidths[4], { bold: true, fontSize: 12 }),
-            createCenteredCell("時間", colWidths[5], { bold: true, fontSize: 12 }),
-            createCenteredCell("節次", colWidths[6], { bold: true, fontSize: 12 }),
+            createCenteredCell("節次 / 時間", colWidths[0], { bold: true, fontSize: 11 }),
+            ...dayNames.map((name, i) => createCenteredCell(name, colWidths[i + 1], { bold: true, fontSize: 12 }))
         ]
     }));
 
-    // 處理課表數據行
-    const timeSlots = scheduleData.time_slots || [];
-    timeSlots.forEach((slot, slotIndex) => {
-        const height = slot.is_lunch ? 700 : 800;
+    // 資料行
+    timeSlots.forEach(slot => {
         const trChildren = [];
+        const periodText = slot.time ? `${slot.name}\n${slot.time}` : slot.name;
+        trChildren.push(createCenteredCell(periodText, colWidths[0], { fontSize: 10 }));
 
-        if (slot.is_lunch) {
-            // 午休：合併前5格
-            const mergeWidth = colWidths.slice(0, 5).reduce((a, b) => a + b, 0);
-            trChildren.push(createCenteredCell("午休", mergeWidth, { colSpan: 5, fontSize: 14 }));
-            trChildren.push(createCenteredCell(slot.time || '', colWidths[5], { fontSize: 12 }));
-            trChildren.push(createCenteredCell("", colWidths[6], { fontSize: 12 }));
+        if (slot.isSpecial) {
+            // 特殊時段（早自習、午休）：合併五個星期欄
+            const mergeWidth = colWidths.slice(1).reduce((a, b) => a + b, 0);
+            trChildren.push(createCenteredCell(`${slot.name}時段`, mergeWidth, { colSpan: 5, fontSize: 11 }));
         } else {
-            // 標準課程行
-            const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
             dayKeys.forEach((dayKey, dayIdx) => {
-                const coursesInSlot = scheduleData.courses?.[slotIndex]?.[dayKey] || [];
-                let cellContent = '';
-
-                if (Array.isArray(coursesInSlot)) {
-                    // 多課程：用換行符分隔
-                    cellContent = coursesInSlot.map(course => {
-                        const courseName = course.name || '';
-                        const teacherName = course.teacher ? ` / ${course.teacher}` : '';
-                        const roomName = course.room ? ` / ${course.room}` : '';
-                        const groupName = course.groups ? ` (${course.groups})` : '';
-                        return `${courseName}${teacherName}${roomName}${groupName}`;
-                    }).join('\n');
-                } else if (typeof coursesInSlot === 'string') {
-                    cellContent = coursesInSlot;
-                }
-
-                trChildren.push(createCenteredCell(cellContent, colWidths[dayIdx], { fontSize: 11 }));
+                const slotKey = `${dayKey}-${slot.period}`;
+                trChildren.push(createCenteredCell(buildCellText(slotKey), colWidths[dayIdx + 1], { fontSize: 10 }));
             });
-
-            // 時間和節次
-            trChildren.push(createCenteredCell(slot.time || '', colWidths[5], { fontSize: 12 }));
-            trChildren.push(createCenteredCell(slot.name || '', colWidths[6], { fontSize: 12 }));
         }
 
         tableRows.push(new TableRow({
-            height: { value: height, rule: HeightRule.AT_LEAST },
+            height: { value: slot.isSpecial ? 500 : 1000, rule: HeightRule.AT_LEAST },
             children: trChildren
         }));
     });
 
-    // 準備學生分組名單
-    const groupingTableRows = [];
-    groupingTableRows.push(new TableRow({
-        children: [
-            createCenteredCell("課程", 5000, { bold: true, fontSize: 12 }),
-            createCenteredCell("分組名單", 7000, { bold: true, fontSize: 12 })
-        ]
-    }));
-
-    // 為每個課程生成分組名單行
-    courses.forEach(course => {
-        const courseName = course.name || '';
-        const groups = course.groups || [];
-        let groupList = '';
-
-        if (Array.isArray(groups) && groups.length > 0) {
-            groupList = groups.map(group => {
-                const groupName = group.name || '';
-                const studentNames = group.students?.map(sid => {
-                    const student = students.find(s => s.id === sid);
-                    return student?.name || sid;
-                }).join('、') || '';
-                return `${groupName}：${studentNames}`;
-            }).join('\n');
-        }
-
-        groupingTableRows.push(new TableRow({
+    // 文件主體
+    const docChildren = [
+        new Paragraph({
+            alignment: AlignmentType.CENTER,
+            heading: HeadingLevel.TITLE,
             children: [
-                createCenteredCell(courseName, 5000, { fontSize: 11 }),
-                createCenteredCell(groupList, 7000, { fontSize: 11 })
+                new TextRun({ text: titleText, font: "標楷體", size: 36, bold: true })
+            ]
+        }),
+        new Paragraph({ text: "" }),
+        new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: tableRows
+        })
+    ];
+
+    // 實施日期
+    const startDate = implementationDates.startDate || implementationDates.start || '';
+    const endDate = implementationDates.endDate || implementationDates.end || '';
+    const dateRange = (startDate && endDate) ? `${startDate} ～ ${endDate}` : '';
+    if (dateRange) {
+        docChildren.push(new Paragraph({
+            spacing: { before: 240, after: 120 },
+            alignment: AlignmentType.RIGHT,
+            children: [new TextRun({ text: `實施日期 ${dateRange}`, font: "Times New Roman", size: 24 })]
+        }));
+    }
+
+    // 學生分組名單（僅一般總課表顯示）
+    if (!isClassroomIntegrated) {
+        const groupingTableRows = [];
+        groupingTableRows.push(new TableRow({
+            tableHeader: true,
+            children: [
+                createCenteredCell("課程 / 分組", Math.round(5.0 * CM_TO_TWIP), { bold: true, fontSize: 12 }),
+                createCenteredCell("學生名單", Math.round(12.0 * CM_TO_TWIP), { bold: true, fontSize: 12 })
             ]
         }));
-    });
 
-    // 組織文件結構
-    const dateRange = implementationDates?.start && implementationDates?.end
-        ? `${implementationDates.start} ～ ${implementationDates.end}`
-        : '';
+        courses.forEach(course => {
+            const groups = Array.isArray(course.groups) ? course.groups : [];
+            groups.forEach(groupName => {
+                const label = (groupName === course.name) ? course.name : `${course.name}\n${groupName}`;
+                const studentIds = (assignments[course.id] && assignments[course.id][groupName]) || [];
+                const studentNames = studentIds.map(sid => {
+                    const student = students.find(s => s.id === sid);
+                    return student ? `${student.grade} ${student.name}` : '';
+                }).filter(Boolean).join('、');
+
+                groupingTableRows.push(new TableRow({
+                    children: [
+                        createCenteredCell(label, Math.round(5.0 * CM_TO_TWIP), { fontSize: 11 }),
+                        createCenteredCell(studentNames || '（尚未分配學生）', Math.round(12.0 * CM_TO_TWIP), { fontSize: 11 })
+                    ]
+                }));
+            });
+        });
+
+        // 若有任何分組資料才附上名單區塊
+        if (groupingTableRows.length > 1) {
+            docChildren.push(new Paragraph({
+                spacing: { before: 360, after: 120 },
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: "學生分組名單", font: "標楷體", size: 28, bold: true })]
+            }));
+            docChildren.push(new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: groupingTableRows
+            }));
+        }
+    }
 
     const doc = new Document({
         sections: [{
@@ -710,70 +803,7 @@ window.generateWordMasterScheduleJS = async function (data) {
                     }
                 }
             },
-            children: [
-                // 標題
-                new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    heading: HeadingLevel.TITLE,
-                    children: [
-                        new TextRun({
-                            text: titleText,
-                            font: "標楷體",
-                            size: 40,
-                            bold: true
-                        })
-                    ]
-                }),
-                new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { before: 120, after: 120 },
-                    children: [
-                        new TextRun({
-                            text: `${prefix} ${year} 年 ${semester} ${suffix}`,
-                            font: "標楷體",
-                            size: 24
-                        })
-                    ]
-                }),
-                new Paragraph({ text: "" }),
-
-                // 主課表
-                new Table({
-                    width: { size: 100, type: WidthType.PERCENTAGE },
-                    rows: tableRows
-                }),
-
-                new Paragraph({
-                    spacing: { before: 240, after: 120 },
-                    alignment: AlignmentType.RIGHT,
-                    children: [
-                        new TextRun({
-                            text: dateRange ? `實施日期 ${dateRange}` : '',
-                            font: "Times New Roman",
-                            size: 24
-                        })
-                    ]
-                }),
-
-                // 學生分組名單表格
-                new Paragraph({
-                    spacing: { before: 240, after: 120 },
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                        new TextRun({
-                            text: "學生分組名單",
-                            font: "標楷體",
-                            size: 28,
-                            bold: true
-                        })
-                    ]
-                }),
-
-                new Table({
-                    width: { size: 100, type: WidthType.PERCENTAGE },
-                    rows: groupingTableRows
-                })
-            ]
+            children: docChildren
         }]
     });
 

@@ -5913,19 +5913,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 1. Delegate to specific functions for supported types
             if (scheduleType === 'master' || scheduleType === 'classroom_integrated') {
-                // 準備數據
+                // 準備數據（自輸入欄位讀取標題，與畫面顯示一致）
                 const data = {
-                    title: scheduleTitle?.prefix || '課表',
-                    prefix: scheduleTitle?.prefix || '',
-                    year: scheduleTitle?.year || new Date().getFullYear(),
-                    semester: scheduleTitle?.semester || '第一學期',
-                    suffix: scheduleTitle?.suffix || '',
+                    isClassroomIntegrated: scheduleType === 'classroom_integrated',
+                    prefix: document.getElementById('title-prefix')?.value || scheduleTitle?.prefix || '',
+                    year: document.getElementById('title-year')?.value || scheduleTitle?.year || '',
+                    semester: document.getElementById('title-semester')?.value || scheduleTitle?.semester || '',
                     courses: courses,
                     scheduleData: scheduleData,
                     students: students,
-                    teachers: teachers,
-                    implementationDates: implementationDates,
-                    timestamp: new Date().getTime()
+                    assignments: assignments,
+                    slotOverrides: slotOverrides,
+                    timeSlots: getCommonTimeSlots(),
+                    implementationDates: implementationDates
                 };
 
                 await window.generateWordMasterScheduleJS(data);
@@ -5939,9 +5939,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (scheduleType === 'classroom') {
                 // 準備教室課表數據
                 const data = {
-                    prefix: scheduleTitle?.prefix || '',
-                    year: scheduleTitle?.year || new Date().getFullYear(),
-                    semester: scheduleTitle?.semester || '第一學期',
+                    prefix: document.getElementById('title-prefix')?.value || scheduleTitle?.prefix || '',
+                    year: document.getElementById('title-year')?.value || scheduleTitle?.year || '',
+                    semester: document.getElementById('title-semester')?.value || scheduleTitle?.semester || '',
                     courses: courses,
                     scheduleData: scheduleData,
                     timeSlots: getCommonTimeSlots()
