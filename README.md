@@ -1,47 +1,37 @@
-# 特教課表管理系統 v2026.05.19d
+# 特教課表管理系統 v2026.07.18a
 
 **一個專為特殊教育老師設計的現代化課表管理系統**
 
-[![Version](https://img.shields.io/badge/version-v2026.05.19d-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-v2026.07.18a-blue.svg)](#)
 [![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)](#)
-[![Tests](https://img.shields.io/badge/tests-25%2F25%20passing-brightgreen.svg)](#)
-[![Performance](https://img.shields.io/badge/performance-A%2B-brightgreen.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-53%2F53%20passing-brightgreen.svg)](#)
 
 ---
 
 ## 🎯 快速開始
 
-### 👨‍🏫 我是教師
-→ 查看 **[GETTING_STARTED.md](GETTING_STARTED.md)** (5 分鐘快速上手)
-
-### 👨‍💻 我是開發者
-→ 查看 **[CLAUDE.md](CLAUDE.md)** (項目架構和開發指南)
-
-### 🔧 我是管理員
-→ 查看 **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** (部署和配置)
+| 我是… | 請看 |
+|-------|------|
+| 👨‍🏫 教師 | **[使用說明書_User_Manual.md](使用說明書_User_Manual.md)** |
+| 👨‍💻 開發者 | **[CLAUDE.md](CLAUDE.md)**（架構與開發指南） |
+| 🔧 部署/管理員 | **[DEPLOY.md](DEPLOY.md)**、**[SETUP_PYTHON.md](SETUP_PYTHON.md)** |
+| 📝 版本紀錄 | **[CHANGELOG.md](CHANGELOG.md)** |
 
 ---
 
 ## 🚀 線上使用
 
-### 正式版本 (推薦)
 👉 **[https://special-education-curriculum.onrender.com](https://special-education-curriculum.onrender.com)**
 
 - ✅ 無需安裝，瀏覽器即開即用
-- ✅ 手動導出/導入課表（完全自主控制備份）
-- ✅ 實時多用戶協作（編輯權限管理）
-- ✅ 閃電般快速登入（0.3 秒 ⚡）
+- ✅ 輸入 User ID 即進入，**每位使用者擁有各自獨立的編輯空間**（資料以 userId 隔離）
+- ✅ 手動匯出／匯入課表，完全自主控制備份
 
-**登入**:
-- 帳號: `admin`
-- 密碼: (由管理員提供)
+**登入**：帳號 `admin`，密碼由管理員提供。
 
 ---
 
 ## 💻 本地執行
-
-### 開發環境 (完整功能)
 
 ```bash
 # 1. 安裝依賴
@@ -59,91 +49,80 @@ http://localhost:3000
 ## ✨ 主要功能
 
 ### 📅 課表管理
-✅ 創建和編輯課程  
-✅ 拖放排課  
-✅ 自動衝突檢測  
-✅ 課表導出 (PDF/Excel)
+- 課程 / 學生 / 教師 / 分組管理（新增、編輯、刪除、搜尋、批次）
+- 拖放式排課（簡易課表），支援同時段多課程
+- 多視圖：**總課表、教室統整課表、教師課表、學生課表、教室課表**
+- 單節學生名單微調（override）、教師兼課標記、學生抽離手動輸入
 
-### 👥 學生管理
-✅ 添加學生信息  
-✅ 學生分組  
-✅ 快速搜尋  
-✅ 批量操作
+### 👥 學生與分組
+- 學生年級設定與快速切換
+- 拖曳式分組、學生池視覺化、分組總覽、匯出 CSV
 
-### 🔄 協作功能
-✅ 邀請協作者  
-✅ 實時同步 (< 3 秒)  
-✅ 編輯者權限管理  
-✅ 在線協作指示
+### 📤 匯出功能
+- **PDF / 列印**：所有課表皆可
+- **Word (.docx)**：簡易課表、教師課表、學生課表、**總課表**、**教室統整課表**、**教室課表**
+  - 總課表 Word 版面對照列印/PDF：橫向 A4、星期反序、節次欄在右、分組由右到左、每格列出學生名單
 
-### 💾 數據備份與版本管理
-✅ **手動導出課表** (JSON 格式) - 自由選擇備份位置  
-✅ **匯入課表文件** - 還原備份檔案  
-✅ **攜帶檔案模式** (data.js) - 完整課表資料離線可用  
-✅ **本地備份管理** - 完全由使用者自主控制版本
+### 💾 資料備份與版本管理
+- **匯出／匯入 JSON** — 自由選擇備份位置與時機
+- **攜帶檔案模式** — 完整課表資料離線可用
+- **LocalStorage 本地快取** + 伺服器儲存（以時間戳同步，含 409 衝突處理）
 
 ---
 
-## 📊 系統性能 ⭐ A+
+## 🏗️ 技術架構
 
-| 指標 | 實際值 | 狀態 |
-|------|-------|------|
-| 登入響應 | **0.3 秒** ⚡ | ✅ |
-| 數據加載 | 0.5 秒 | ✅ |
-| 實時同步 | 1.2 秒 | ✅ |
-| 併發用戶 | 5/5 成功 | ✅ |
-| 性能提升 | **99%** | ✅ |
+| 層級 | 技術 |
+|------|------|
+| 前端 | HTML5 + CSS3 + Vanilla JavaScript；`docx.js`（Word 匯出） |
+| 後端 | Python Flask + Flask-SocketIO |
+| 儲存 | `data/<user_id>.json`（伺服器）+ LocalStorage（本地快取） |
+| 部署 | Render.com（gunicorn）／本地 `python app.py`／獨立 exe |
 
-> **性能改進**: Phase 2 移除 GAS 依賴後，登入時間從 35-50 秒降至 0.3 秒！
+> 詳細架構、資料模型與關鍵程式碼位置請見 **[CLAUDE.md](CLAUDE.md)**。
 
 ---
 
 ## 🔐 安全與隱私
 
-- ✅ **HTTPS 加密傳輸** - 所有數據在線路上加密
-- ✅ **本地數據存儲** - 用戶完全控制數據位置
-- ✅ **手動備份控制** - 自由選擇何時導出、存儲何處
-- ✅ **身份驗證保護** - 帳號密碼 + 編輯權限管理
-- ✅ **無敏感信息硬編碼** - 所有密鑰使用環境變數
-- ✅ **符合教育規範** - 遵守教育部數據保護要求
+- ✅ HTTPS 加密傳輸
+- ✅ 資料以 userId 隔離，使用者自主控制匯出/匯入備份
+- ✅ 帳號密碼驗證；密鑰以環境變數管理，無硬編碼
+- ⚠️ Render free tier 為短暫檔案系統，伺服器重啟會清空 `data/` — 請定期以匯出功能備份
 
 ---
 
-## 🔄 版本更新
+## 🔄 版本更新（摘要）
 
-### 最新版本: v2026.05.19d
+完整紀錄見 **[CHANGELOG.md](CHANGELOG.md)**。
 
-#### **v2026.05.19d (2026-05-19)** ✨ Phase 2 完成 - UI 清理
-- ✅ 移除 Google Sheet 橙色 Banner
-- ✅ 移除自動 GAS 還原提示信息
-- ✅ 完全依賴手動導出/導入進行備份
-- ✅ 所有 25 個單元測試通過
-- ✅ 代碼精簡（刪除 88 行過時代碼）
+### v2026.07.18a（2026-07-18）
+- ✨ **新增總課表 / 教室統整課表 / 教室課表(個別) 的 Word 匯出**
+- ✨ 總課表 Word 版面對照列印/PDF：橫向、星期反序、分組由右到左、格內框線對齊、學生逐行列出
+- 🧪 同步測試改寫為時間戳邏輯；移除已淘汰的 GAS 雲端還原測試
 
-#### **v2026.05.19** - 導出/導入、攜帶檔案、GAS 移除
-- 新增手動導出課表功能（JSON 格式）
-- 新增攜帶檔案模式 (data.js) - 離線可用完整課表
-- 新增匯入還原功能（支援 JSON 和 data.js）
-- 完全移除 GAS 依賴
-- 登入時間 35-50s → 0.3s ⚡
+### v2026.05.20b（2026-05-20）
+- ❌ 移除「編輯／檢視模式」區分與角色條；改為每位使用者獨立編輯空間
+- 🔧 改善 WebSocket 與 API timeout（Render 冷啟動）
+
+### 早期
+- 移除登入時的 Google Apps Script 自動還原，改為手動匯出/匯入備份
 
 ---
 
-## 📚 文檔
+## 🧪 測試
 
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - 快速開始指南
-- **[FEATURES_GUIDE.md](FEATURES_GUIDE.md)** - 完整功能詳解
-- **[CLAUDE.md](CLAUDE.md)** - 技術架構指南
-- **[FAQ.md](FAQ.md)** - 常見問題
+```bash
+node tests/test_frontend_node.js        # 14
+node tests/test_frontend_data.js        # 14
+node tests/test_frontend_grouping.js    # 9
+node tests/test_frontend_scheduling.js  # 6
+python -m pytest tests/test_backend_api.py -q   # 10
+```
+
+目前：前端 43 項、後端 10 項，全部通過。
 
 ---
 
-## 📄 許可證
-
-本軟體採用 **MIT License** - 詳見 [LICENSE](LICENSE) 檔案
-
----
-
-**特教課表管理系統 v2026.05.19d**  
-最後更新: 2026-05-19  
-官方網址: https://special-education-curriculum.onrender.com
+**特教課表管理系統 v2026.07.18a**　|　最後更新：2026-07-18
+官方網址：https://special-education-curriculum.onrender.com

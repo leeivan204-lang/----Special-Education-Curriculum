@@ -1,5 +1,9 @@
 # 專案指南 - 特教課表管理系統
 
+> **版本**: 2026.07.18a　|　**文件版本**: 3.0（移除 GAS 自動還原與編輯模式後的實際架構）
+
+---
+
 ## 1. 快速開始 (Quick Start)
 
 ### 本地開發 (Local Development)
@@ -13,6 +17,8 @@ python app.py
 # 3. 瀏覽器開啟
 http://localhost:3000
 ```
+
+登入後輸入任意 User ID 即進入系統。每位使用者擁有各自獨立的編輯空間，資料以 `userId` 隔離。
 
 ### 生產環境打包 (Build Executable)
 ```powershell
@@ -30,365 +36,243 @@ http://localhost:3000
 │                    使用者瀏覽器                              │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ Frontend: HTML5 + CSS3 + Vanilla JavaScript          │   │
-│  │ - index.html: UI 結構                                 │   │
-│  │ - script.js: 課程管理、拖放、Socket.IO 事件          │   │
-│  │ - index.css: 樣式表                                  │   │
+│  │ - index.html   : UI 結構                              │   │
+│  │ - script.js    : 課程/學生/教師/分組管理、拖放排課、  │   │
+│  │                  總課表渲染、同步邏輯、Socket.IO      │   │
+│  │ - index.css    : 樣式表                               │   │
+│  │ - docx_export.js: 前端 Word 匯出 (docx.js)            │   │
+│  │ - LocalStorage : 本地快取                             │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────┬──────────────────────────────────────────┘
-                  │ WebSocket (Socket.IO) + HTTP API
+                  │ WebSocket (Socket.IO) + HTTP JSON API
                   │
 ┌─────────────────▼──────────────────────────────────────────┐
-│               後端伺服器 (Render.com)                       │
+│            後端伺服器 (Flask + Flask-SocketIO)              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │ Backend: Python Flask                                │   │
-│  │ - app.py: 主應用、API 端點                          │   │
-│  │ - /api/login: 驗證登入                               │   │
-│  │ - /api/data/<user_id>: 讀取使用者資料                │   │
-│  │ - /api/save: 儲存使用者資料                          │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                        │                                      │
+│  │ app.py:                                              │   │
+│  │ - POST /api/login          : 帳號/密碼驗證           │   │
+│  │ - GET  /api/data/<user_id> : 讀取使用者資料          │   │
+│  │ - POST /api/data/<user_id> : 儲存使用者資料 (含 409  │   │
+│  │                              時間戳衝突處理)          │   │
+│  │ - GET  /api/ping           : 健康檢查                │   │
+│  │ - Socket.IO: join / disconnect                       │   │
+│  │ - (保留但前端已停用) editor_* 鎖定端點               │   │
+│  └────────────────────┬─────────────────────────────────┘   │
 │  ┌────────────────────▼─────────────────────────────────┐   │
-│  │ 本地資料儲存 (Ephemeral)                             │   │
-│  │ - data/: JSON 格式使用者資料                         │   │
-│  │ - 伺服器重啟時全部遺失 ❌                            │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────┬──────────────────────────────────────────┘
-                  │ HTTP GET/POST (25s timeout)
-                  │ User-Agent: Mozilla/5.0 (防反爬蟲)
-                  │
-┌─────────────────▼──────────────────────────────────────────┐
-│        Google Apps Script (GAS) - 永久備份                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ gas_script.gs: 資料讀寫端點                          │   │
-│  │ - doGet(e): 讀取使用者資料                           │   │
-│  │ - doPost(e): 儲存使用者資料                          │   │
-│  │ - 身份驗證: Server Key 或 OAuth ID Token             │   │
-│  │ - keepAlive(): 防冷啟動 (5 分鐘觸發一次)             │   │
-│  └──────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ Google Sheet - 兩層架構 (雙向相容)                   │   │
-│  │ ✓ 新架構: 單一分頁 "課表資料" (userId 為主鍵)       │   │
-│  │ ✓ 舊架構: 每個 userId 一個獨立分頁 (向後相容)       │   │
+│  │ 本地資料儲存 (data/<user_id>.json)                   │   │
+│  │ - Render free tier 為短暫檔案系統，重啟後遺失 ❌     │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
+
+備份策略：使用者以「匯出資料 (JSON)」/「匯出攜帶檔」手動備份，
+         再以「匯入資料」還原。系統不再自動連線 Google Apps Script。
+         (gas_script.gs 仍保留於 repo，屬選用的外部備份腳本，非執行流程一部分)
 ```
 
 ### 資料流程 (Data Flow)
 
-#### 1. 登入 → 自動 GAS 恢復流程
+#### 登入 → 載入 / 同步流程
 ```
-使用者登入
+使用者輸入 User ID → POST /api/login (驗證)
     ↓
-POST /api/login (驗證)
+loadDataAndSync()  [script.js:878]
     ↓
-客戶端檢查本地資料
-    ├─ 有 → 直接加載
-    └─ 無 → 請求後端恢復
-        ↓
-    GET /api/data/<user_id>
-        ↓
-    後端檢查本地檔案
-    ├─ 有 → 返回
-    └─ 無 → 啟動背景 GAS 恢復執行緒
-        ↓
-    _start_gas_restore_bg() [背景執行緒，25s 超時]
-        ↓
-    pull_from_gas(user_id)
-        ↓
-    GAS GET /課表資料?userId=XXX (或舊分頁回溯)
-        ↓
-    寫入本地 data/<user_id>.json
-        ↓
-    Socket.IO: 'gas_restore_ready' 事件
-        ↓
-    前端接收並更新 UI (須確保 mainAppSection 已顯示)
+GET /api/data/<user_id>  (逾時 10 秒)
+    ├─ 伺服器有資料
+    │     ├─ 本機 lastSyncedTimestamp > 伺服器 timestamp + 門檻
+    │     │     → 以本機 localStorage 為準，並延遲補推伺服器
+    │     └─ 否則 → 採用伺服器資料 (importDataToMemory)
+    └─ 逾時 / 無資料 → 顯示還原橫幅，等待重試 (不自動寫入空資料)
+```
+
+> 同步以 **時間戳 (timestamp)** 判斷，無 `confirm()` 對話框、無 GAS 還原。
+
+#### 儲存流程
+```
+資料變動 → saveAllDataToServer()  [script.js:964]
+    ↓
+POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
+    ├─ 200 → 更新 lastSyncedTimestamp
+    └─ 409 → 時間戳衝突，依合併/覆蓋策略處理
 ```
 
 ---
 
 ## 3. 關鍵程式碼位置 (Critical Code Locations)
 
-### 前端 (script.js)
+### 前端資料與同步 (script.js)
 
-| 功能 | 位置 | 說明 |
+| 功能 | 行號 | 說明 |
 |------|------|------|
-| GAS 恢復事件監聽 | 行 292-306 | **CRITICAL**: 檢查 mainAppSection 狀態；若隱藏則中止 |
-| 恢復橫幅與重試 | 行 1085-1132 | 顯示恢復狀態、自動重試 (30s × 4 次) |
-| 版本字串 | 行 (index.html) 133 | 當前: 2026.04.21d |
+| 版本字串 `VERSION_NUMBER` | 47 | 目前: `2026.07.18a`（同步更新 index.html 版本與 `?v=` 快取字串） |
+| `store` (LocalStorage 封裝) | ~200 | `get/set/getRaw/setRaw`；快取與 `lastSyncedTimestamp` |
+| `loadDataAndSync()` | 878 | 登入後載入 + 時間戳同步（**無 GAS**） |
+| `saveAllDataToServer()` | 964 | POST 儲存，含 409 衝突處理 |
+| `importDataToMemory()` | 1299 | 將資料寫入記憶體變數並刷新所有畫面 |
+| `getFullDataSnapshot()` | 1795 | 匯出/儲存用的完整資料快照 |
+| `renderMasterSchedule()` | 3528 | 總課表 / 教室統整課表 畫面渲染（含列印版反序表格） |
+| `getCommonTimeSlots()` | 3958 | 共用時段定義（早自習、1–4 節、中午、5–7 節） |
+| `generateClassroomSchedules()` | 4888 | 教室課表（個別）畫面渲染 |
+| `exportMasterScheduleWord()` | 5904 | **Word 匯出分派器**：依 schedule-type 呼叫對應函數 |
 
-**關鍵邏輯檢查清單**:
-```javascript
-socket.on('gas_restore_ready', async (data) => {
-    // ⚠️ 如果此時 mainAppSection 被隱藏 → 事件被忽略！
-    if (!mainAppSection || mainAppSection.style.display === 'none') {
-        console.log('[GAS] User not yet in main app, skipping restore refresh');
-        return;  // 靜默返回 = 無法加載資料
-    }
-    // ... 加載資料
-});
-```
+### 前端 Word 匯出 (docx_export.js)
+
+| 匯出類型 | 函數 | 行號 |
+|---------|------|------|
+| 簡易課表 | `generateWordScheduleJS` | 52 |
+| 教師課表 (個別) | `generateWordTeacherScheduleJS` | 165 |
+| 學生課表 (個別) | `generateWordStudentScheduleJS` | 343 |
+| **總課表 / 教室統整課表** | `generateWordMasterScheduleJS` | 509 |
+| **教室課表 (個別)** | `generateWordClassroomScheduleJS` | 869 |
+
+**總課表 Word 版面重點**（`generateWordMasterScheduleJS`，對照列印/PDF）:
+- 橫向 A4（`PageOrientation.LANDSCAPE`）
+- 星期欄反序（星期五 → 星期一），節次/時間欄置於**最右**
+- 每星期欄拆成兩個實體欄：分組**由右到左**（A 在右、B 在左，C、D 依序往下）
+- 分組欄以主表格框線分隔 → 分隔線延伸到底；欄內逐列補空行使橫向虛線對齊
+- 早自習、中午以灰底合併列呈現
+- 一般總課表在每格列出學生名單；教室統整模式僅顯示課程/教師/教室
 
 ### 後端 (app.py)
 
 | 功能 | 行號 | 說明 |
 |------|------|------|
-| 登入驗證 | 706-725 | POST /api/login 驗證帳號/密碼 |
-| 資料讀取端點 | 779-810 | GET /api/data/<user_id>；無本地檔案時觸發 GAS 恢復 |
-| 背景 GAS 恢復執行緒 | 727-777 | **CRITICAL**: 啟動背景執行緒，25s 超時 |
-| GAS 請求函式 | 628-671 | pull_from_gas(user_id)；含 Mozilla User-Agent |
-| Socket.IO 事件發送 | 756-762 | 發送 'gas_restore_ready' 事件 |
-| 強制恢復端點 | 813-831 | POST /api/gas-restore-force/<user_id> 清除快取並重新啟動 |
-
-**關鍵執行緒檢查清單**:
-```python
-def _start_gas_restore_bg(user_id, file_path):
-    """背景執行緒，25 秒超時。檢查此函數是否被呼叫"""
-    # ⚠️ 若此函數從未執行 → 後端日誌無 [GAS/BG] 開頭的訊息
-    # ⚠️ 若執行但無法連線 GAS → 超時後返回 None
-    thread = threading.Thread(target=_gas_restore_worker, args=(user_id, file_path), daemon=True)
-    thread.start()
-```
-
-### Google Apps Script (gas_script.gs)
-
-| 功能 | 行號 | 說明 |
-|------|------|------|
-| GET 端點 | 42-72 | 讀取使用者資料；支援 Server Key 和 OAuth Token |
-| POST 端點 | 79-110 | 寫入使用者資料（備份） |
-| 新架構讀取 | 212-230 | 從單一 "課表資料" 分頁讀取 |
-| 舊架構回溯 | 236-264 | 若新架構找不到，嘗試每 userId 獨立分頁 |
-| 保溫函數 | 118-122 | keepAlive()；防 GAS 冷啟動 |
+| 靜態檔服務 | 134, 138 | `/` 與 `/<path>` |
+| 登入驗證 | 589 | `POST /api/login` |
+| 健康檢查 | 541 | `GET /api/ping` |
+| 資料讀取 | 638 | `GET /api/data/<user_id>`（讀 `data/<user_id>.json`） |
+| 資料儲存 | 664 | `POST /api/data/<user_id>`（時間戳衝突回 409） |
+| Socket.IO | 143, 175 | `join` / `disconnect` |
+| 編輯鎖 (保留未用) | 282–541 | `editor_*` 事件與 `/api/editor/*`；前端已停用，後端保留相容 |
 
 ---
 
-## 4. 故障排查 (Troubleshooting)
+## 4. 資料模型 (Data Model)
 
-### 症狀 1: 登入後無法加載課表 (GAS 恢復失敗)
+`getFullDataSnapshot()` 產生的結構（匯出 JSON / 儲存至伺服器）:
 
-#### 診斷步驟
+```jsonc
+{
+  "schemaVersion": 1,
+  "timestamp": 1721200000000,          // UTC 毫秒
+  "scheduleTitle": { "prefix": "", "year": "", "semester": "", "suffix": "" },
+  "implementationDates": { "startDate": "", "endDate": "" },
 
-**步驟 1: 檢查瀏覽器控制台** (F12 → Console)
-```javascript
-// 應該看到:
-[GAS] User not yet in main app, skipping restore refresh  // ✓ 或
-[GAS] 恢復成功，更新 UI                                    // ✓ 或
-[GAS] 恢復失敗: ...                                        // ✗ 錯誤訊息
+  "students": [ { "id": 1001, "name": "王小明", "grade": "7" } ],
+  "teachers": [ { "id": 2001, "name": "陳老師", "baseHours": 20 } ],
+
+  "courses": [
+    {
+      "id": 3001,
+      "name": "國語文",
+      "groups": ["甲組", "乙組"],                     // 分組名稱字串陣列
+      "groupDetails": {
+        "甲組": { "hours": 4, "room": "101教室", "teacher": ["陳老師"], "displayRoom": "" }
+      }
+    }
+  ],
+
+  // 分組 → 學生指派
+  "assignments": { "3001": { "甲組": [1001, 1003], "乙組": [1002] } },
+
+  // 排課：key 為 `${day}-${period}`，value 為區塊陣列
+  "scheduleData": { "monday-1": [ { "courseId": 3001, "blockIndex": 0 } ] },
+
+  // 單一時段的學生名單微調（delta 或絕對陣列）
+  "slotOverrides": { "monday-1": { "3001": { "甲組": { "type": "delta", "added": [1002], "removed": [1005] } } } },
+
+  "teacherPartTimeMarks": {},
+  "studentManualEntries": {}
+}
 ```
 
-**步驟 2: 啟用 Preserve Log** (防止登入重新整理時日誌消失)
-- Chrome DevTools → Console → 齒輪⚙️ → 勾選 "Preserve log"
-- 重新整理頁面，觀察所有日誌
+重點：
+- `scheduleData` 為**扁平物件**，key = `{day}-{period}`（day: monday…friday；period: morning/1–7/lunch）。
+- 分組學生存於獨立的 `assignments`，非 `course.groups` 內。
+- 總課表某格的學生名單 = `assignments[courseId][groupName]` 再套用 `slotOverrides[slotKey]`。
+- Word 匯出與畫面渲染共用同一資料模型（見 `renderMasterSchedule`）。
 
-**步驟 3: 檢查 Render 後端日誌**
-- Render Dashboard → 應用程式 → Logs
-- 搜尋: `POST /api/login` 及 `[GAS/BG]` 前綴
-- **關鍵檢查點**:
-  ```
-  ✓ [GAS/BG] Starting restoration thread for userId=...
-  ✓ [GAS/BG] pull_from_gas returned: <type>  (has data: True/False)
-  ✓ [GAS/BG] EMITTING gas_restore_ready
-  ✗ 若無上述訊息 → 線程未執行或前端連線失敗
-  ```
+---
 
-**步驟 4: 檢查 GAS 是否有資料**
-- Google Sheet → 開啟對應使用者的分頁 (或 "課表資料" 分頁)
-- 確認資料存在且為有效 JSON
+## 5. 功能總覽 (Features)
 
-**步驟 5: 手動測試 GAS 端點** (使用 curl 或 Postman)
+- **學生 / 課程 / 教師管理**：新增、編輯、刪除、搜尋、批次新增；年級快速切換。
+- **分組管理**：拖曳式分組、學生池、分組總覽、匯出 CSV。
+- **排課（簡易課表）**：拖放排課、同時段多課程、課表標題與實施日期。
+- **總課表 / 教室統整課表 / 教師 / 學生 / 教室課表**：多視圖切換；單節學生名單微調（override）；教師兼課標記；學生抽離手動輸入。
+- **匯出**：
+  - **PDF / 列印**：所有課表皆可。
+  - **Word (.docx)**：簡易課表、教師課表(個別)、學生課表(個別)、**總課表**、**教室統整課表**、**教室課表(個別)**（前端 docx.js 產生）。
+- **資料管理**：匯出/匯入 JSON、匯出攜帶檔、LocalStorage 本地快取。
+- **多人提示**：Socket.IO 連線狀態、時間戳衝突偵測。
+
+### 已移除功能（勿在文件或程式中復現）
+- ❌ 編輯/檢視模式區分與角色條（前端已移除；後端 editor_* 端點保留但停用）。
+- ❌ 登入時的 Google Apps Script 自動還原流程（改為使用者手動匯出/匯入備份）。
+
+---
+
+## 6. 故障排查 (Troubleshooting)
+
+### 症狀：登入後課表未載入
+1. **瀏覽器 Console (F12)**：查看 `[loadDataAndSync]` 訊息。
+   - `伺服器回應逾時` → 伺服器冷啟動或網路問題，橫幅會自動重試。
+   - `以本機 localStorage 為準，補推伺服器` → 本機資料較新，正常。
+2. **後端日誌**：搜尋 `POST /api/login`、`GET /api/data`、`POST /api/data`。
+3. **本地快取**：`localStorage` 是否有 `courses` 等資料。
+4. **Render 重啟**：free tier 重啟會清空 `data/`，若無伺服器資料且本機也無 → 需以匯入還原。
+
+### 症狀：Word 匯出無反應或內容為空
+- 確認瀏覽器已載入最新 `docx_export.js`（`index.html` 的 `?v=` 快取字串是否更新；必要時 Ctrl+F5）。
+- 確認資料結構正確（`scheduleData` 為扁平 `{day-period}`；分組學生在 `assignments`）。
+- 於真實瀏覽器測試（自動化/無頭環境的 `Packer.toBlob` 可能卡住）。
+
+### 症狀：儲存出現 409 / 資料過期
+- 代表伺服器上的 `timestamp` 比本機基準新（他處已更新）。依提示重新載入後再儲存，或選擇覆蓋。
+
+---
+
+## 7. 環境設定 (Environment)
+
+Render Dashboard 環境變數：
+
+| 變數名 | 說明 |
+|--------|------|
+| `ADMIN_PASSWORD` | 後端登入密碼 |
+| `FLASK_ENV` | 執行環境（`production`） |
+
+> 註：GAS 相關環境變數（`GAS_WEBHOOK_URL`、`GAS_SERVER_KEY` 等）已非執行流程所需；
+> 僅在你選擇使用 `gas_script.gs` 作為外部備份時才需設定。詳見 [DEPLOY.md](DEPLOY.md)。
+
+---
+
+## 8. 測試 (Tests)
+
 ```bash
-# Server Key 認證 (後端用)
-curl "https://script.google.com/...?userId=Spe for u&serverKey=YOUR_KEY"
+# 前端 (Node.js)
+node tests/test_frontend_node.js         # 工具/同步邏輯 (14)
+node tests/test_frontend_data.js         # 資料處理 (14)
+node tests/test_frontend_grouping.js     # 分組 (9)
+node tests/test_frontend_scheduling.js   # 排課 (6)
 
-# OAuth 認證 (前端用)
-curl -H "Authorization: Bearer YOUR_ID_TOKEN" "https://script.google.com/...?userId=Spe for u"
+# 後端 (Python)
+python -m pytest tests/test_backend_api.py -q   # (10)
 ```
 
-#### 常見原因及解決方案
+目前狀態：前端 43 項、後端 10 項，全部通過。
 
-| 症狀 | 原因 | 解決方案 |
-|------|------|---------|
-| 後端無 [GAS/BG] 日誌 | 線程未啟動或前端未呼叫 /api/data | 檢查: (1) GET /api/data 是否被呼叫？(2) 後端部署版本是否正確？ |
-| GAS 返回 401 Unauthorized | Server Key 錯誤或過期 | 檢查 Render 環境變數: GAS_SERVER_KEY 是否與 GAS 專案設定相符 |
-| GAS 返回 500 Server Error | GAS 語法錯誤或 Sheet 損壞 | 開啟 GAS 編輯器，檢查執行日誌 |
-| 前端收不到 gas_restore_ready 事件 | Socket.IO 連線失敗 或事件發送但前端未監聽 | 檢查: (1) WebSocket 連線狀態 (2) mainAppSection 顯示狀態 |
-| 本地檔案無法寫入 | Render 檔案系統權限或路徑錯誤 | 檢查 app.py 中 data 目錄是否存在; Render 重啟會刪除所有本地檔案 |
+> 同步測試（`test_frontend_node.js`）已對齊新的時間戳同步邏輯；舊的 GAS 雲端還原測試已移除。
 
 ---
 
-## 5. 環境設定 (Environment Setup)
+## 9. 開發工作流 (Development Workflow)
 
-### Render.com 環境變數
-
-在 Render Dashboard 設定以下環境變數:
-
-| 變數名 | 說明 | 範例 |
-|--------|------|------|
-| `GAS_WEBHOOK_URL` | Google Apps Script Web App URL | `https://script.google.com/macros/d/XXX/userweb?v=1` |
-| `GAS_SERVER_KEY` | GAS 專案設定的 Server Key | `my-secret-key-2026` |
-| `ADMIN_PASSWORD` | 後端登入密碼 | `your-secure-password` |
-| `FLASK_ENV` | 執行環境 | `production` |
-
-### Google Apps Script 設定
-
-1. **開啟 GAS 專案**
-   - 進入 Google Sheet 內嵌的 Apps Script 編輯器
-
-2. **設定指令碼屬性** (Script Properties)
-   - 左側「專案設定」 → 「指令碼屬性」
-   - 新增以下屬性:
-     ```
-     SERVER_KEY         | my-secret-key-2026  (與 Render GAS_SERVER_KEY 相同)
-     GOOGLE_CLIENT_ID   | (可選) 前端 OAuth Client ID
-     ALLOWED_EMAILS     | teacher@gmail.com,admin@school.edu.tw (逗號分隔，可留空)
-     ```
-
-3. **部署為 Web 應用程式**
-   - 「部署」→ 「管理部署作業」 → 「新增部署」
-   - 類型: **Web 應用程式**
-   - 執行身分: **我（部署者）**
-   - 誰可以存取: **所有人 (Anyone)**
-   - 部署後複製 URL → 貼入 Render 環境變數 `GAS_WEBHOOK_URL`
-
-4. **設定保溫觸發器** (防冷啟動)
-   - 左側「觸發器」 → 「新增觸發器」
-   - 函數: `keepAlive`
-   - 時間驅動: 每 5 分鐘
-   - 保存
-
----
-
-## 6. 診斷命令 (Diagnostic Commands)
-
-### 檢查後端日誌 (Render Dashboard)
-```bash
-# 即時監看日誌
-tail -f /path/to/render/logs
-
-# 搜尋特定訊息
-grep "[GAS/BG]" /path/to/render/logs
-grep "POST /api/login" /path/to/render/logs
-grep "GET /api/data" /path/to/render/logs
-```
-
-### 檢查前端日誌 (瀏覽器 DevTools)
-```javascript
-// 篩選 GAS 相關日誌
-console.log('%c[GAS]', 'color: red;', '恢復開始');
-
-// 檢查 mainAppSection 狀態
-console.log('mainAppSection:', mainAppSection);
-console.log('display:', mainAppSection?.style.display);
-
-// 檢查 Socket.IO 連線
-console.log('socket.connected:', socket.connected);
-```
-
-### 強制恢復 (開發用)
-```bash
-# 清除本地快取並強制 GAS 恢復
-curl -X POST "http://localhost:3000/api/gas-restore-force/Spe for u"
-```
-
----
-
-## 7. 已知問題與解決方案 (Known Issues)
-
-### Issue #1: 登入後 30 秒內 gas_restore_ready 事件無反應
-**根本原因**: 登入流程期間 mainAppSection 被隱藏；GAS 恢復完成時，前端已進入主應用，但事件處理器檢查到前端狀態不符而靜默返回。
-
-**臨時解決**:
-- 前端加入重試機制 (_bannerAutoRetry 每 30 秒重試一次)
-- 使用者點擊「重新加載」按鈕
-
-**根本解決**: (進行中)
-- 將 GAS 恢復移至登入流程**前**
-- 改變事件觸發時機，不依賴 Socket.IO
-
-### Issue #2: Render 伺服器重啟後所有本地資料遺失
-**根本原因**: Render free tier 使用短暫檔案系統；每次重啟 data/ 目錄內容全部遺失。
-
-**設計考量**:
-- GAS 是永久備份，登入時自動恢復 ✓
-- 本地快取用於加速讀取，並非持久化存儲 ✓
-- 若 GAS 恢復失敗 → 資料遺失 ✗
-
-**長期解決**: 遷移至 Render Disk 或 PostgreSQL
-
-### Issue #3: Socket.IO 連線不穩定，WebSocket 初始連線失敗
-**根本原因**: Render 跨域連線延遲；Browser 與 Render 伺服器間的 WebSocket 握手失敗。
-
-**臨時解決**:
-- 自動重試 (Socket.IO 內建)
-- 監控連線狀態日誌
-
-**測試連線**:
-```javascript
-socket.on('connect', () => console.log('✓ 已連線'));
-socket.on('disconnect', () => console.log('✗ 連線中斷'));
-socket.on('connect_error', (err) => console.log('✗ 連線錯誤:', err));
-```
-
----
-
-## 8. 開發工作流 (Development Workflow)
-
-### 新增功能步驟
-
-1. **前端新增功能** (script.js + index.html)
-   ```bash
-   python app.py  # 啟動本地伺服器
-   # 在瀏覽器開啟 http://localhost:3000 測試
-   # F12 → Console 檢查日誌
-   ```
-
-2. **後端新增端點** (app.py)
-   ```bash
-   # 新增 /api/new-endpoint
-   # 在 script.js 呼叫: fetch('/api/new-endpoint')
-   # 本地測試
-   curl http://localhost:3000/api/new-endpoint
-   ```
-
-3. **GAS 同步測試**
-   - 本地資料存入 GAS: POST /api/save
-   - 清除本地快取: rm data/<user_id>.json
-   - 重新登入測試自動恢復
-
-4. **版本更新**
-   - 修改 `index.html` 行 133 版本號 (格式: YYYY.MM.DDx)
-   - 提交 commit
-   - 推送至 Render 自動部署
-
----
-
-## 9. 部署步驟 (Deployment)
-
-### 推送至 Render (自動)
-```bash
-git add .
-git commit -m "Fix: GAS restoration retry logic"
-git push origin main
-# Render 自動檢測並重新部署
-```
-
-### 檢查部署狀態
-- Render Dashboard → 應用程式 → Deploys
-- 確認最新版本號與預期相符
-
-### 驗證部署成功
-```bash
-# 1. 檢查應用程式是否運行
-curl https://special-education-curriculum.onrender.com
-
-# 2. 檢查 API 是否可用
-curl https://special-education-curriculum.onrender.com/api/login \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your-password"}'
-
-# 3. 檢查後端日誌中是否有部署通知
-# Render Dashboard → Logs
-```
+新增/修改功能後，依 `.agent/workflows/system-update.md` 檢查清單：
+1. **更新文件**：`CLAUDE.md`、`README.md`、`CHANGELOG.md`（記錄本次變更）。
+2. **敏感資訊**：確認無硬編碼金鑰；`.env` 已被 `.gitignore` 忽略。
+3. **更新版本號**：`script.js` `VERSION_NUMBER`（~47）、`index.html` 側邊欄版本（~52）與 `<script src="...?v=YYYYMMDDx">` 快取字串（~657–658）。格式 `YYYY.MM.DDx`，每日字母重置。
+4. **測試**：執行上述前後端測試確認全過。
+5. **提交/推送**：清楚的 commit 訊息；推送後於 Render 確認部署成功。
 
 ---
 
@@ -398,50 +282,21 @@ curl https://special-education-curriculum.onrender.com/api/login \
 特教課表 Special Education Curriculum/
 ├── app.py                      # Flask 後端主應用
 ├── index.html                  # 前端 UI
-├── script.js                   # 前端邏輯（課程、拖放、Socket.IO）
+├── script.js                   # 前端邏輯（管理、排課、渲染、同步、匯出分派）
 ├── index.css                   # 樣式表
+├── docx_export.js              # 前端 Word 匯出 (docx.js)
 ├── requirements.txt            # Python 依賴
-├── build_exe.ps1              # 打包 exe 腳本
-├── gas_script.gs              # Google Apps Script (複製至 GAS 編輯器)
-├── data/                      # 本地使用者資料 (JSON) - 短暫儲存
+├── build_exe.ps1               # 打包 exe 腳本
+├── gas_script.gs               # (選用) 外部 Google Apps Script 備份腳本
+├── data/                       # 本地使用者資料 (JSON)；Render 上為短暫儲存
 │   └── <user_id>.json
-└── CLAUDE.md                  # 本專案指南
+├── tests/                      # 前端 (Node) 與後端 (pytest) 測試
+├── CHANGELOG.md                # 版本更新日誌
+├── DEPLOY.md / SETUP_PYTHON.md # 部署與環境設定
+├── 使用說明書_User_Manual.md   # 使用手冊
+└── CLAUDE.md                   # 本專案指南
 ```
 
 ---
 
-## 11. 聯繫與反饋 (Support)
-
-### 報告問題
-1. 啟用「Preserve log」，重現問題
-2. 截圖前端控制台日誌
-3. 提供 Render 後端日誌 (搜尋 [GAS/BG] 或 POST /api/login)
-4. 提供操作步驟與預期結果
-
-### 常見問題 (FAQ)
-
-**Q: 為什麼登入後等待很久才加載課表？**
-A: GAS 可能因冷啟動而延遲。確保:
-- GAS 設定了 keepAlive 觸發器
-- Render 環境變數 GAS_WEBHOOK_URL 正確
-- 後端日誌顯示 "pull_from_gas returned" 訊息
-
-**Q: 若使用者資料永久遺失怎麼辦？**
-A: 根本原因是 GAS 恢復失敗。恢復步驟:
-- 檢查 GAS Sheet 是否有資料
-- 檢查 GAS 是否有過期 OAuth token
-- 使用 "強制恢復" 端點: POST /api/gas-restore-force/<user_id>
-
-**Q: 本地開發與生產環境有什麼差異？**
-A: 本地:
-- `data/` 為永久資料夾 (開發機上)
-- GAS 仍為備份，但優先用本地快取
-
-生產 (Render):
-- `data/` 每次重啟丟失
-- GAS 恢復為必須 (唯一持久化儲存)
-
----
-
-**最後更新**: 2026-04-21 (v2026.04.21d)
-**文件版本**: 2.0 (完整架構與故障排查指南)
+**最後更新**: 2026-07-18（v2026.07.18a）
