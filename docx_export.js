@@ -661,7 +661,7 @@ window.generateWordMasterScheduleJS = async function (data) {
         return groupStudents;
     };
 
-    // 取得某時段的分組清單 (依分組名排序)
+    // 取得某時段的分組清單 (依課程與分組定義順序，即 A、B、C、D)
     const getRenderItems = (slotKey) => {
         const blocks = scheduleData[slotKey];
         const items = [];
@@ -673,7 +673,6 @@ window.generateWordMasterScheduleJS = async function (data) {
                 }
             });
         }
-        items.sort((a, b) => a.groupName.localeCompare(b.groupName, 'zh-TW'));
         return items;
     };
 
@@ -717,77 +716,90 @@ window.generateWordMasterScheduleJS = async function (data) {
         return paras;
     };
 
-    // 無框線的巢狀表格框線設定
-    const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-    const dashBorder = { style: BorderStyle.DASHED, size: 1, color: "999999" };
+    // 框線樣式：實線 = 日/節邊界；虛線 = 同一格內分組分隔
+    const solidBorder = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+    const dashBorder = { style: BorderStyle.DASHED, size: 4, color: "808080" };
+    const dashParaBorder = { style: BorderStyle.DASHED, size: 4, color: "808080", space: 1 };
+    const subWidth = Math.round(dayWidth / 2);
 
-    // 一個星期單元格 → TableCell (可能含巢狀 2 欄表格)
-    const buildDayCell = (slotKey, dayIdx) => {
-        const items = getRenderItems(slotKey);
-
-        if (items.length === 0) {
-            return new TableCell({
-                width: { size: dayWidth, type: WidthType.DXA },
-                verticalAlign: VerticalAlign.CENTER,
-                children: [P('', { size: 10 })]
-            });
-        }
-
-        if (items.length === 1) {
-            // 單一分組：跨滿整格，學生兩人一行
-            const { course, groupName } = items[0];
-            return new TableCell({
-                width: { size: dayWidth, type: WidthType.DXA },
-                verticalAlign: VerticalAlign.CENTER,
-                children: groupBlockParagraphs(slotKey, course, groupName, true)
-            });
-        }
-
-        // 多個分組：巢狀 2 欄表格，格內以虛線十字分隔各分組
-        const halfWidth = Math.round(dayWidth / 2);
-        const nestedRows = [];
-        for (let i = 0; i < items.length; i += 2) {
-            const rowItems = items.slice(i, i + 2);
-            const cells = rowItems.map(({ course, groupName }) => new TableCell({
-                width: { size: halfWidth, type: WidthType.DXA },
-                verticalAlign: VerticalAlign.TOP,
-                margins: { top: 20, bottom: 20, left: 20, right: 20 },
-                children: groupBlockParagraphs(slotKey, course, groupName, false)
-            }));
-            // 補足第二欄 (使該列維持 2 欄)
-            if (cells.length === 1) {
-                cells.push(new TableCell({
-                    width: { size: halfWidth, type: WidthType.DXA },
-                    children: [P('', { size: 10 })]
+    // 將多個分組區塊垂直堆疊於同一欄，區塊間以虛線橫隔
+    const stackBlocks = (slotKey, blockItems) => {
+        const out = [];
+        blockItems.forEach((it, idx) => {
+            const paras = groupBlockParagraphs(slotKey, it.course, it.groupName, false);
+            out.push(...paras);
+            if (idx < blockItems.length - 1) {
+                // 區塊間的虛線橫隔
+                out.push(new Paragraph({
+                    spacing: { before: 40, after: 40 },
+                    border: { bottom: dashParaBorder },
+                    children: [new TextRun({ text: '' })]
                 }));
             }
-            nestedRows.push(new TableRow({ children: cells }));
+        });
+        return out;
+    };
+
+    // 一個星期欄 → TableCell 陣列 (主表格中該日佔兩個實體欄)
+    //   由右到左：A(第1組) 在右欄，B(第2組) 在左欄，C、D 依序往下堆疊
+    const buildDayCells = (slotKey) => {
+        const items = getRenderItems(slotKey);
+        const allSolid = { top: solidBorder, bottom: solidBorder, left: solidBorder, right: solidBorder };
+
+        // 無課程：空白格跨兩欄
+        if (items.length === 0) {
+            return [new TableCell({
+                columnSpan: 2,
+                width: { size: dayWidth, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                borders: allSolid,
+                children: [P('', { size: 10 })]
+            })];
         }
 
-        const nestedTable = new Table({
-            width: { size: dayWidth, type: WidthType.DXA },
-            borders: {
-                top: noBorder, bottom: noBorder, left: noBorder, right: noBorder,
-                insideHorizontal: dashBorder, insideVertical: dashBorder
-            },
-            rows: nestedRows
+        // 單一分組：跨滿兩欄，學生兩人一行
+        if (items.length === 1) {
+            const { course, groupName } = items[0];
+            return [new TableCell({
+                columnSpan: 2,
+                width: { size: dayWidth, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                borders: allSolid,
+                children: groupBlockParagraphs(slotKey, course, groupName, true)
+            })];
+        }
+
+        // 多個分組：右欄放 A、C、E (偶數索引)，左欄放 B、D (奇數索引)
+        const rightItems = items.filter((_, i) => i % 2 === 0);
+        const leftItems = items.filter((_, i) => i % 2 === 1);
+
+        const leftCell = new TableCell({
+            width: { size: subWidth, type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: { top: 20, bottom: 20, left: 20, right: 20 },
+            borders: { top: solidBorder, bottom: solidBorder, left: solidBorder, right: dashBorder },
+            children: leftItems.length ? stackBlocks(slotKey, leftItems) : [P('', { size: 10 })]
+        });
+        const rightCell = new TableCell({
+            width: { size: subWidth, type: WidthType.DXA },
+            verticalAlign: VerticalAlign.TOP,
+            margins: { top: 20, bottom: 20, left: 20, right: 20 },
+            borders: { top: solidBorder, bottom: solidBorder, left: dashBorder, right: solidBorder },
+            children: stackBlocks(slotKey, rightItems)
         });
 
-        return new TableCell({
-            width: { size: dayWidth, type: WidthType.DXA },
-            verticalAlign: VerticalAlign.TOP,
-            children: [nestedTable]
-        });
+        // 主表格由左至右：左欄(B、D) 在前，右欄(A、C) 在後
+        return [leftCell, rightCell];
     };
 
     // --- 主課表 ---
     const tableRows = [];
 
-    // 標題列：星期五 ... 星期一 + (節次欄留白)
+    // 標題列：星期五 ... 星期一 (各跨兩欄) + (節次欄留白)
     tableRows.push(new TableRow({
         tableHeader: true,
         children: [
-            ...daysReversed.map(d => createCenteredCell(d.name, dayWidth, { bold: true, fontSize: 14 })),
+            ...daysReversed.map(d => createCenteredCell(d.name, dayWidth, { bold: true, fontSize: 14, colSpan: 2 })),
             createCenteredCell('', periodWidth, { bold: true, fontSize: 12 })
         ]
     }));
@@ -795,11 +807,11 @@ window.generateWordMasterScheduleJS = async function (data) {
     // 每節一列
     timeSlots.forEach(slot => {
         if (slot.isSpecial) {
-            // 特殊時段（早自習、中午）：五個星期欄合併為灰底提示，節次欄顯示名稱與時間
+            // 特殊時段（早自習、中午）：所有星期欄 (10 個實體欄) 合併為灰底提示，節次欄顯示名稱與時間
             const mergeWidth = dayWidth * 5;
             const mergedCell = new TableCell({
                 width: { size: mergeWidth, type: WidthType.DXA },
-                columnSpan: 5,
+                columnSpan: 10,
                 verticalAlign: VerticalAlign.CENTER,
                 shading: { fill: "F2F2F2" },
                 children: [P(`${slot.name}時段`, { size: 11, font: "標楷體" })]
@@ -822,7 +834,8 @@ window.generateWordMasterScheduleJS = async function (data) {
             return;
         }
 
-        const dayCells = daysReversed.map((d, idx) => buildDayCell(`${d.key}-${slot.period}`, idx));
+        // 每日產生 1~2 個實體欄
+        const dayCells = daysReversed.reduce((acc, d) => acc.concat(buildDayCells(`${d.key}-${slot.period}`)), []);
 
         // 節次/時間欄 (最右)：第 N 節 / 起 / / / 迄
         const periodParas = [P(toArabicPeriod(slot.name), { size: 11, bold: true })];
@@ -866,6 +879,15 @@ window.generateWordMasterScheduleJS = async function (data) {
         }),
         new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
+            columnWidths: [
+                subWidth, subWidth, subWidth, subWidth, subWidth,
+                subWidth, subWidth, subWidth, subWidth, subWidth,
+                periodWidth
+            ],
+            borders: {
+                top: solidBorder, bottom: solidBorder, left: solidBorder, right: solidBorder,
+                insideHorizontal: solidBorder, insideVertical: solidBorder
+            },
             rows: tableRows
         })
     );
