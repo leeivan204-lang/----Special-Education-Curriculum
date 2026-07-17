@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only initialize DOM in production/browser environment
     if (!isTestEnvironment) {
         // --- 版本資訊 ---
-        const VERSION_NUMBER = '2026.07.17a';
+        const VERSION_NUMBER = '2026.07.18a';
         const VERSION_DATE = 'May 20, 2026';  // 自動更新日期
 
         // 初始化版本號顯示
@@ -5925,7 +5925,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     assignments: assignments,
                     slotOverrides: slotOverrides,
                     timeSlots: getCommonTimeSlots(),
-                    implementationDates: implementationDates
+                    implementationDates: implementationDates,
+                    madeDate: (() => {
+                        const t = new Date();
+                        const roc = t.getFullYear() - 1911;
+                        const mm = String(t.getMonth() + 1).padStart(2, '0');
+                        const dd = String(t.getDate()).padStart(2, '0');
+                        return `${roc}. ${mm}. ${dd}`;
+                    })()
                 };
 
                 await window.generateWordMasterScheduleJS(data);
