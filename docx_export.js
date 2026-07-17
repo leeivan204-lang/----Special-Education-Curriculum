@@ -722,26 +722,16 @@ window.generateWordMasterScheduleJS = async function (data) {
     const dashParaBorder = { style: BorderStyle.DASHED, size: 4, color: "808080", space: 1 };
     const subWidth = Math.round(dayWidth / 2);
 
-    // 將多個分組區塊垂直堆疊於同一欄，區塊間以虛線橫隔
-    const stackBlocks = (slotKey, blockItems) => {
-        const out = [];
-        blockItems.forEach((it, idx) => {
-            const paras = groupBlockParagraphs(slotKey, it.course, it.groupName, false);
-            out.push(...paras);
-            if (idx < blockItems.length - 1) {
-                // 區塊間的虛線橫隔
-                out.push(new Paragraph({
-                    spacing: { before: 40, after: 40 },
-                    border: { bottom: dashParaBorder },
-                    children: [new TextRun({ text: '' })]
-                }));
-            }
-        });
-        return out;
-    };
+    // 產生一條虛線橫隔段落 (區塊之間)
+    const dividerPara = () => new Paragraph({
+        spacing: { before: 40, after: 40 },
+        border: { bottom: dashParaBorder },
+        children: [new TextRun({ text: '' })]
+    });
 
     // 一個星期欄 → TableCell 陣列 (主表格中該日佔兩個實體欄)
     //   由右到左：A(第1組) 在右欄，B(第2組) 在左欄，C、D 依序往下堆疊
+    //   逐列將左右兩區塊補空行至等高，使區塊間的虛線橫隔左右對齊
     const buildDayCells = (slotKey) => {
         const items = getRenderItems(slotKey);
         const allSolid = { top: solidBorder, bottom: solidBorder, left: solidBorder, right: solidBorder };
@@ -770,22 +760,50 @@ window.generateWordMasterScheduleJS = async function (data) {
         }
 
         // 多個分組：右欄放 A、C、E (偶數索引)，左欄放 B、D (奇數索引)
-        const rightItems = items.filter((_, i) => i % 2 === 0);
-        const leftItems = items.filter((_, i) => i % 2 === 1);
+        // 逐列 (每列 = 一組右欄 + 一組左欄) 補空行至等高，讓橫向虛線對齊
+        const numRows = Math.ceil(items.length / 2);
+        const leftParas = [];
+        const rightParas = [];
+
+        for (let r = 0; r < numRows; r++) {
+            const rightItem = items[2 * r];       // A、C、E
+            const leftItem = items[2 * r + 1];    // B、D
+
+            const rP = rightItem
+                ? groupBlockParagraphs(slotKey, rightItem.course, rightItem.groupName, false)
+                : [P('', { size: 10 })];
+            const lP = leftItem
+                ? groupBlockParagraphs(slotKey, leftItem.course, leftItem.groupName, false)
+                : [P('', { size: 10 })];
+
+            // 補空行至等高 (區塊結構平行：標題/教師/教室 + 學生，皆等高)
+            const maxLen = Math.max(rP.length, lP.length);
+            while (rP.length < maxLen) rP.push(P('', { size: 10 }));
+            while (lP.length < maxLen) lP.push(P('', { size: 10 }));
+
+            rightParas.push(...rP);
+            leftParas.push(...lP);
+
+            // 非最後一列：兩欄同步加一條虛線橫隔 (位置對齊)
+            if (r < numRows - 1) {
+                rightParas.push(dividerPara());
+                leftParas.push(dividerPara());
+            }
+        }
 
         const leftCell = new TableCell({
             width: { size: subWidth, type: WidthType.DXA },
             verticalAlign: VerticalAlign.TOP,
             margins: { top: 20, bottom: 20, left: 20, right: 20 },
             borders: { top: solidBorder, bottom: solidBorder, left: solidBorder, right: dashBorder },
-            children: leftItems.length ? stackBlocks(slotKey, leftItems) : [P('', { size: 10 })]
+            children: leftParas
         });
         const rightCell = new TableCell({
             width: { size: subWidth, type: WidthType.DXA },
             verticalAlign: VerticalAlign.TOP,
             margins: { top: 20, bottom: 20, left: 20, right: 20 },
             borders: { top: solidBorder, bottom: solidBorder, left: dashBorder, right: solidBorder },
-            children: stackBlocks(slotKey, rightItems)
+            children: rightParas
         });
 
         // 主表格由左至右：左欄(B、D) 在前，右欄(A、C) 在後
