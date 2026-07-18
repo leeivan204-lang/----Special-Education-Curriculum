@@ -4251,7 +4251,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         validStudents.forEach(student => {
             const semesterChinese = toChineseNum(scheduleTitle.semester);
-            const titleHeader = `新北市立江翠國中特教班 ${scheduleTitle.year} 學年度第${semesterChinese}學期課表`;
+            const titleHeader = `${scheduleTitle.prefix} ${scheduleTitle.year} 學年度第${semesterChinese}學期課表`;
             const fullTitleScreen = `${scheduleTitle.prefix} ${scheduleTitle.year} 學年度第 ${scheduleTitle.semester} 學期 ${student.grade} ${student.name} 課表`;
 
             // --- 1. Screen Layout (Standard: Mon -> Fri) ---
@@ -5690,7 +5690,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const semester = document.getElementById('title-semester').value || '';
             const semesterChinese = { '1': '一', '2': '二', '3': '三' }[semester] || semester;
 
-            const title = `新北市立江翠國中特教班 ${year} 學年度第${semesterChinese}學期課表`;
+            const title = `${prefix} ${year} 學年度第${semesterChinese}學期課表`;
 
             // 2. Filter Students
             const validStudents = students.filter(s => s && s.name);
