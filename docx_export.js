@@ -543,9 +543,9 @@ window.generateWordMasterScheduleJS = async function (data) {
         { key: 'monday', name: '星期一' }
     ];
 
-    // 列寬 (橫向 A4，可用寬度約 27cm)
-    const dayWidth = Math.round(4.9 * CM_TO_TWIP);
-    const periodWidth = Math.round(2.0 * CM_TO_TWIP);
+    // 列寬 (直向 A4，可用寬度約 19cm：5 日 × 3.4cm + 節次 1.6cm ≈ 18.6cm)
+    const dayWidth = Math.round(3.4 * CM_TO_TWIP);
+    const periodWidth = Math.round(1.6 * CM_TO_TWIP);
 
     // --- 小工具 ---
     const P = (text, opts = {}) => new Paragraph({
@@ -848,7 +848,7 @@ window.generateWordMasterScheduleJS = async function (data) {
         sections: [{
             properties: {
                 page: {
-                    size: { orientation: PageOrientation.LANDSCAPE },
+                    size: { orientation: PageOrientation.PORTRAIT },
                     margin: {
                         top: Math.round(1.0 * CM_TO_TWIP),
                         bottom: Math.round(1.0 * CM_TO_TWIP),
