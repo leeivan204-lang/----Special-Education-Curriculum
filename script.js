@@ -24,7 +24,6 @@
  * └─────────────────────────────────────────────────────┘
  */
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[SCRIPT] script.js loaded - renderRoleBar should be undefined');
     // Check if running in test environment
     const isTestEnvironment = typeof global !== 'undefined' && global.__IS_TEST__;
 
@@ -36,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let scheduleData = {};
     let teacherPartTimeMarks = {};
     let scheduleTitle = {};
-    let timeSlotOverrides = {};
 
     // Note: window.__TEST__ is defined later at the end of the callback
     // when all functions are fully defined (around line 6331)
@@ -45,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isTestEnvironment) {
         // --- 版本資訊 ---
         const VERSION_NUMBER = '2026.07.18a';
-        const VERSION_DATE = 'May 20, 2026';  // 自動更新日期
+        const VERSION_DATE = 'Jul 18, 2026';  // 自動更新日期
 
         // 初始化版本號顯示
         function initializeVersionDisplay() {
@@ -802,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!loginResult) {
                 showLoginError('⚠️ 伺服器無回應，以離線模式進入');
                 CURRENT_USER = userId;
-                await enterApp(null, true);
+                await enterApp(true);
                 return;
             }
 
@@ -1839,7 +1837,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.implementationDates) implementationDates = data.implementationDates;
         if (data.teacherPartTimeMarks) teacherPartTimeMarks = data.teacherPartTimeMarks;
         if (data.studentManualEntries) studentManualEntries = data.studentManualEntries;
-        if (data.slotOverrides) timeSlotOverrides = data.slotOverrides;
+        if (data.slotOverrides) slotOverrides = data.slotOverrides;
         if (data.scheduleTitle) scheduleTitle = data.scheduleTitle;
 
         // Refresh UI to display restored data
@@ -2632,31 +2630,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAssignedStudents(courseId, groupName) {
         const assignedIds = assignments[courseId][groupName] || [];
-        console.log(`[DEBUG] renderAssignedStudents for "${groupName}":`, {
-            groupName,
-            assignedIds,
-            studentsCount: students.length,
-            firstStudentId: students[0]?.id,
-            firstStudentIdType: typeof students[0]?.id,
-            assignedIdsTypes: assignedIds.map(id => typeof id)
-        });
         const html = assignedIds.map(studentId => {
             const student = students.find(s => s.id === studentId);
-            console.log(`[DEBUG] Looking for studentId=${studentId} (type: ${typeof studentId}), found:`, student ? student.name : 'NOT FOUND');
             if (!student) return '';
             return createDraggableStudentHTML(student);
         }).join('');
-        console.log(`[DEBUG] renderAssignedStudents result for "${groupName}": ${html.length} chars`);
         return html;
     }
 
     function renderStudentPool(courseId) {
-        console.log('=== renderStudentPool called ===');
-        console.log('courseId:', courseId);
-        console.log('studentPoolContainer:', studentPoolContainer);
-        console.log('Total students in system:', students.length);
-        console.log('Students:', students);
-
         // Defensive check: ensure container exists
         if (!studentPoolContainer) {
             console.error('Student pool container not found');
@@ -2666,26 +2648,21 @@ document.addEventListener('DOMContentLoaded', () => {
         // Find all students assigned to ANY group in this course
         const assignedStudentIds = new Set();
         const courseAssignments = assignments[courseId] || {};
-        console.log('Course assignments:', courseAssignments);
 
         Object.values(courseAssignments).forEach(ids => {
             ids.forEach(id => assignedStudentIds.add(id));
         });
-        console.log('Assigned student IDs:', Array.from(assignedStudentIds));
 
         // Filter students who are NOT in the set
         const unassignedStudents = students.filter(s => !assignedStudentIds.has(s.id));
-        console.log('Unassigned students:', unassignedStudents);
 
         // Sort by grade
         unassignedStudents.sort((a, b) => b.grade - a.grade);
 
         // Render students or show empty state
         if (unassignedStudents.length === 0) {
-            console.log('No unassigned students, showing empty state');
             studentPoolContainer.innerHTML = '<div class="empty-state">所有學生已分配</div>';
         } else {
-            console.log('Rendering', unassignedStudents.length, 'unassigned students');
             studentPoolContainer.innerHTML = unassignedStudents.map(student =>
                 createDraggableStudentHTML(student)
             ).join('');
@@ -2693,8 +2670,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Re-attach events for pool items
         attachGroupingDragEvents();
-
-        console.log('=== renderStudentPool completed ===');
     }
 
     function createDraggableStudentHTML(student) {
@@ -5919,8 +5894,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof removeCourseBlock !== 'undefined') window.__TEST__.removeCourseBlock = removeCourseBlock;
         if (typeof window.removeFromSchedule !== 'undefined') window.__TEST__.removeFromSchedule = window.removeFromSchedule;
     }
-});
-
 
     async function handleLogout() {
         const confirmed = confirm('確定要登出嗎？\n\n提醒：請記得定期使用「匯出資料」功能來備份您的課表');
@@ -5929,3 +5902,4 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(doLogout, 2000);
         }
     }
+});
