@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="index.css?v=20260421c">
+    <link rel="stylesheet" href="index.css?v=20260718i">
     <!-- Word Export Libraries -->
     <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -53,7 +53,15 @@
             </div>
 
             <nav class="sidebar-nav">
-                <button class="nav-btn active" data-view="students">
+                <button class="nav-btn active" data-view="guide">
+                    <span class="icon">📖</span>
+                    <span>使用介紹</span>
+                </button>
+                <button class="nav-btn" data-view="teachers">
+                    <span class="icon">👨‍🏫</span>
+                    <span>教師管理</span>
+                </button>
+                <button class="nav-btn" data-view="students">
                     <span class="icon">👨‍🎓</span>
                     <span>學生管理</span>
                 </button>
@@ -68,10 +76,6 @@
                 <button class="nav-btn" data-view="schedule">
                     <span class="icon">📅</span>
                     <span>簡易課表</span>
-                </button>
-                <button class="nav-btn" data-view="teachers">
-                    <span class="icon">👨‍🏫</span>
-                    <span>教師管理</span>
                 </button>
                 <button class="nav-btn" data-view="master-schedule">
                     <span class="icon">📋</span>
@@ -107,8 +111,98 @@
 
         <!-- 主內容區 -->
         <main class="main-content">
+            <!-- 使用介紹視圖 -->
+            <div id="guide-view" class="view-container active">
+                <div class="view-header">
+                    <h2>📖 使用介紹</h2>
+                </div>
+
+                <div class="guide">
+                    <p class="guide-intro">
+                        歡迎使用<strong>特教課表管理系統</strong>！本系統協助你依序建立教師、學生、課程與分組，
+                        完成排課後即可產生總課表，並匯出成 PDF 或 Word。以下依<strong>實際操作順序</strong>說明。
+                    </p>
+
+                    <div class="guide-callout guide-callout-warn">
+                        ⚠️ <strong>重要：請定期備份。</strong>線上版（Render）伺服器重啟後可能清空資料，
+                        請養成用左側「<strong>匯出資料</strong>」下載 JSON 備份的習慣，需要時再用「匯入資料」還原。
+                    </div>
+
+                    <h3 class="guide-h3">🚀 建議操作順序</h3>
+                    <ol class="guide-steps">
+                        <li class="guide-step">
+                            <span class="guide-step-icon">👨‍🏫</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">① 教師管理</div>
+                                <p>先建立所有任課教師，並可設定基本鐘點與備註。後續課程分組要指定授課教師時，這裡的名單會被引用。</p>
+                                <div class="guide-tip">💡 提示：教師姓名之後可在「總課表 → 教師課表」單獨檢視與匯出。</div>
+                            </div>
+                        </li>
+                        <li class="guide-step">
+                            <span class="guide-step-icon">👨‍🎓</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">② 學生管理</div>
+                                <p>新增學生姓名並設定年級（7、8、9）。若姓名已存在，直接<strong>點擊年級數字</strong>即可循環切換（7→8→9→7）。也可用「批次新增」一次貼上多位。</p>
+                                <div class="guide-tip">💡 提示：年級會顯示在課表每位學生名字前（例如「7 王小明」）。</div>
+                            </div>
+                        </li>
+                        <li class="guide-step">
+                            <span class="guide-step-icon">📚</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">③ 課程管理</div>
+                                <p>新增科目，並為每門課設定<strong>分組（1～5 組）</strong>、每週節數、教室與授課教師。可另設「教室課表顯示教室」，讓該課在「教室課表」顯示於指定教室。</p>
+                                <div class="guide-tip">💡 提示：分組名稱（如甲組、乙組／A 組、B 組）會用在排課與名單，建議先想好命名。</div>
+                            </div>
+                        </li>
+                        <li class="guide-step">
+                            <span class="guide-step-icon">👥</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">④ 分組管理</div>
+                                <p>選擇課程後，用<strong>拖曳</strong>方式把「學生池」的學生拉進各分組。可跨組移動、清除分組，或用「查看所有分組」總覽、匯出 CSV 一覽表。</p>
+                                <div class="guide-tip">💡 提示：個別學生的單節微調或抽離，請到「總課表」調整，不會回寫這裡的分組。</div>
+                            </div>
+                        </li>
+                        <li class="guide-step">
+                            <span class="guide-step-icon">📅</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">⑤ 簡易課表（排課）</div>
+                                <p>從「課程區塊池」把課程<strong>拖放</strong>到週一～週五的節次上；同一時段可放多門課。並在此設定課表<strong>標題（學校／班級、學年度、學期）與實施日期</strong>。</p>
+                                <div class="guide-tip">💡 提示：這裡設定的標題會套用到總課表與各種匯出檔的檔名／抬頭。</div>
+                            </div>
+                        </li>
+                        <li class="guide-step">
+                            <span class="guide-step-icon">📋</span>
+                            <div class="guide-step-body">
+                                <div class="guide-step-title">⑥ 總課表（檢視・微調・匯出）</div>
+                                <p>綜合檢視所有排課。用上方下拉可切換<strong>總課表／教室統整課表／教師課表／學生課表／教室課表</strong>五種視圖，並可「匯出 Word」或「匯出 PDF／列印」。</p>
+                                <div class="guide-tip">💡 提示：每格右上的 ✎ 可做<strong>單節學生名單微調</strong>（override），只影響該時段、不動原始分組。</div>
+                            </div>
+                        </li>
+                    </ol>
+
+                    <h3 class="guide-h3">🖨️ 匯出與列印</h3>
+                    <ul class="guide-list">
+                        <li><strong>PDF／列印</strong>：所有課表皆可，點「匯出 PDF／列印」後於瀏覽器列印或存成 PDF。</li>
+                        <li><strong>Word (.docx)</strong>：簡易課表、教師課表、學生課表、總課表、教室統整課表、教室課表皆可匯出。</li>
+                        <li>總課表 Word 版面對照列印：橫向、星期反序、分組由右到左、每格列出學生名單。</li>
+                    </ul>
+
+                    <h3 class="guide-h3">💾 資料備份與還原</h3>
+                    <ul class="guide-list">
+                        <li><strong>匯出資料 (Export)</strong>：下載完整課表 JSON，作為備份。</li>
+                        <li><strong>匯入資料 (Import)</strong>：載入先前的 JSON 備份還原。</li>
+                        <li><strong>匯出攜帶檔 (Portable)</strong>：產生可離線開啟的完整課表檔。</li>
+                    </ul>
+
+                    <div class="guide-callout guide-callout-info">
+                        ❓ <strong>登入後課表沒出現？</strong>多半是伺服器冷啟動或本機／伺服器資料較新。稍候會自動重試；
+                        若確定伺服器已清空，請用「匯入資料」還原你的備份。
+                    </div>
+                </div>
+            </div>
+
             <!-- 學生管理視圖 -->
-            <div id="students-view" class="view-container active">
+            <div id="students-view" class="view-container">
                 <div class="view-header">
                     <h2>學生管理</h2>
                     <div style="display:flex;gap:0.5rem;">
