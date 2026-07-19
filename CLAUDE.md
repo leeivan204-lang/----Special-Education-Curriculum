@@ -1,6 +1,6 @@
 # 專案指南 - 特教課表管理系統
 
-> **版本**: 2026.07.18a　|　**文件版本**: 3.0（移除 GAS 自動還原與編輯模式後的實際架構）
+> **版本**: 2026.07.20a　|　**文件版本**: 3.0（移除 GAS 自動還原與編輯模式後的實際架構）
 
 ---
 
@@ -104,16 +104,16 @@ POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
 
 | 功能 | 行號 | 說明 |
 |------|------|------|
-| 版本字串 `VERSION_NUMBER` | 47 | 目前: `2026.07.18a`（同步更新 index.html 版本與 `?v=` 快取字串） |
+| 版本字串 `VERSION_NUMBER` | 45 | 目前: `2026.07.20a`（同步更新 index.html 版本與 `?v=` 快取字串） |
 | `store` (LocalStorage 封裝) | ~200 | `get/set/getRaw/setRaw`；快取與 `lastSyncedTimestamp` |
-| `loadDataAndSync()` | 878 | 登入後載入 + 時間戳同步（**無 GAS**） |
-| `saveAllDataToServer()` | 964 | POST 儲存，含 409 衝突處理 |
-| `importDataToMemory()` | 1299 | 將資料寫入記憶體變數並刷新所有畫面 |
-| `getFullDataSnapshot()` | 1795 | 匯出/儲存用的完整資料快照 |
-| `renderMasterSchedule()` | 3528 | 總課表 / 教室統整課表 畫面渲染（含列印版反序表格） |
-| `getCommonTimeSlots()` | 3958 | 共用時段定義（早自習、1–4 節、中午、5–7 節） |
-| `generateClassroomSchedules()` | 4888 | 教室課表（個別）畫面渲染 |
-| `exportMasterScheduleWord()` | 5904 | **Word 匯出分派器**：依 schedule-type 呼叫對應函數 |
+| `loadDataAndSync()` | 876 | 登入後載入 + 時間戳同步（**無 GAS**） |
+| `saveAllDataToServer()` | 962 | POST 儲存，含 409 衝突處理 |
+| `importDataToMemory()` | 1297 | 將資料寫入記憶體變數並刷新所有畫面 |
+| `getFullDataSnapshot()` | 1793 | 匯出/儲存用的完整資料快照 |
+| `renderMasterSchedule()` | 3503 | 總課表 / 教室統整課表 畫面渲染（含列印版反序表格） |
+| `getCommonTimeSlots()` | 3933 | 共用時段定義（早自習、1–4 節、中午、5–7 節） |
+| `generateClassroomSchedules()` | 4863 | 教室課表（個別）畫面渲染 |
+| `exportMasterScheduleWord()` | 5786 | **Word 匯出分派器**：依 schedule-type 呼叫對應函數 |
 
 ### 前端 Word 匯出 (docx_export.js)
 
@@ -123,25 +123,25 @@ POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
 | 教師課表 (個別) | `generateWordTeacherScheduleJS` | 165 |
 | 學生課表 (個別) | `generateWordStudentScheduleJS` | 343 |
 | **總課表 / 教室統整課表** | `generateWordMasterScheduleJS` | 509 |
-| **教室課表 (個別)** | `generateWordClassroomScheduleJS` | 869 |
+| **教室課表 (個別)** | `generateWordClassroomScheduleJS` | 872 |
 
 **總課表 Word 版面重點**（`generateWordMasterScheduleJS`，對照列印/PDF）:
-- 橫向 A4（`PageOrientation.LANDSCAPE`）
+- 直向 A4（`PageOrientation.PORTRAIT`）；欄寬：星期欄每日 3.5cm、節次欄 1.4cm
 - 星期欄反序（星期五 → 星期一），節次/時間欄置於**最右**
 - 每星期欄拆成兩個實體欄：分組**由右到左**（A 在右、B 在左，C、D 依序往下）
 - 分組欄以主表格框線分隔 → 分隔線延伸到底；欄內逐列補空行使橫向虛線對齊
 - 早自習、中午以灰底合併列呈現
-- 一般總課表在每格列出學生名單；教室統整模式僅顯示課程/教師/教室
+- 一般總課表在每格列出學生名單（該分組 > 10 位時於寬格改兩人一行）；教室統整模式僅顯示課程/教師/教室
 
 ### 後端 (app.py)
 
 | 功能 | 行號 | 說明 |
 |------|------|------|
-| 靜態檔服務 | 134, 138 | `/` 與 `/<path>` |
-| 登入驗證 | 589 | `POST /api/login` |
-| 健康檢查 | 541 | `GET /api/ping` |
-| 資料讀取 | 638 | `GET /api/data/<user_id>`（讀 `data/<user_id>.json`） |
-| 資料儲存 | 664 | `POST /api/data/<user_id>`（時間戳衝突回 409） |
+| 靜態檔服務 | 132, 136 | `/` 與 `/<path>` |
+| 登入驗證 | 587 | `POST /api/login` |
+| 健康檢查 | 539 | `GET /api/ping` |
+| 資料讀取 | 636 | `GET /api/data/<user_id>`（讀 `data/<user_id>.json`） |
+| 資料儲存 | 662 | `POST /api/data/<user_id>`（時間戳衝突回 409） |
 | Socket.IO | 143, 175 | `join` / `disconnect` |
 | 編輯鎖 (保留未用) | 282–541 | `editor_*` 事件與 `/api/editor/*`；前端已停用，後端保留相容 |
 
@@ -196,13 +196,14 @@ POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
 
 ## 5. 功能總覽 (Features)
 
+- **使用介紹**：側邊欄首項，登入後預設顯示的圖文操作說明（`index.html` 的 `#guide-view`）。側邊欄依操作流程排序：使用介紹 → 教師 → 學生 → 課程 → 分組 → 簡易課表 → 總課表。
 - **學生 / 課程 / 教師管理**：新增、編輯、刪除、搜尋、批次新增；年級快速切換。
 - **分組管理**：拖曳式分組、學生池、分組總覽、匯出 CSV。
 - **排課（簡易課表）**：拖放排課、同時段多課程、課表標題與實施日期。
 - **總課表 / 教室統整課表 / 教師 / 學生 / 教室課表**：多視圖切換；單節學生名單微調（override）；教師兼課標記；學生抽離手動輸入。
 - **匯出**：
   - **PDF / 列印**：所有課表皆可。
-  - **Word (.docx)**：簡易課表、教師課表(個別)、學生課表(個別)、**總課表**、**教室統整課表**、**教室課表(個別)**（前端 docx.js 產生）。
+  - **Word (.docx)**：簡易課表、教師課表(個別)、學生課表(個別)、**總課表**、**教室統整課表**、**教室課表(個別)**（前端 docx.js 產生）。總課表為**直向 A4**。
 - **資料管理**：匯出/匯入 JSON、匯出攜帶檔、LocalStorage 本地快取。
 - **多人提示**：Socket.IO 連線狀態、時間戳衝突偵測。
 
@@ -299,4 +300,4 @@ python -m pytest tests/test_backend_api.py -q   # (10)
 
 ---
 
-**最後更新**: 2026-07-18（v2026.07.18a）
+**最後更新**: 2026-07-20（v2026.07.20a）
