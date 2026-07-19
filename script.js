@@ -36,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let scheduleData = {};
     let teacherPartTimeMarks = {};
     let scheduleTitle = {};
-    let timeSlotOverrides = {};
 
     // Note: window.__TEST__ is defined later at the end of the callback
     // when all functions are fully defined (around line 6331)
@@ -1839,7 +1838,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.implementationDates) implementationDates = data.implementationDates;
         if (data.teacherPartTimeMarks) teacherPartTimeMarks = data.teacherPartTimeMarks;
         if (data.studentManualEntries) studentManualEntries = data.studentManualEntries;
-        if (data.slotOverrides) timeSlotOverrides = data.slotOverrides;
+        if (data.slotOverrides) slotOverrides = data.slotOverrides;
         if (data.scheduleTitle) scheduleTitle = data.scheduleTitle;
 
         // Refresh UI to display restored data
@@ -5919,8 +5918,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof removeCourseBlock !== 'undefined') window.__TEST__.removeCourseBlock = removeCourseBlock;
         if (typeof window.removeFromSchedule !== 'undefined') window.__TEST__.removeFromSchedule = window.removeFromSchedule;
     }
-});
-
 
     async function handleLogout() {
         const confirmed = confirm('確定要登出嗎？\n\n提醒：請記得定期使用「匯出資料」功能來備份您的課表');
@@ -5929,3 +5926,4 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(doLogout, 2000);
         }
     }
+});
