@@ -543,9 +543,9 @@ window.generateWordMasterScheduleJS = async function (data) {
         { key: 'monday', name: '星期一' }
     ];
 
-    // 列寬 (直向 A4，可用寬度約 19cm：5 日 × 3.4cm + 節次 1.6cm ≈ 18.6cm)
-    const dayWidth = Math.round(3.4 * CM_TO_TWIP);
-    const periodWidth = Math.round(1.6 * CM_TO_TWIP);
+    // 列寬 (直向 A4，可用寬度約 19cm：節次欄收窄、星期欄放寬 → 5 日 × 3.5cm + 節次 1.4cm = 18.9cm)
+    const dayWidth = Math.round(3.5 * CM_TO_TWIP);
+    const periodWidth = Math.round(1.4 * CM_TO_TWIP);
 
     // --- 小工具 ---
     const P = (text, opts = {}) => new Paragraph({
@@ -599,8 +599,10 @@ window.generateWordMasterScheduleJS = async function (data) {
     };
 
     // 單一分組區塊 → Paragraph 陣列
-    // twoColStudents: 學生是否兩人一行 (單一分組跨滿整格時使用)
-    const groupBlockParagraphs = (slotKey, course, groupName, twoColStudents) => {
+    // wideCell: 是否為跨滿整格的寬欄 (單一分組)。寬欄且學生 > 10 位時改「兩人一行」以省高度；
+    //           窄的多分組子欄一律一人一行，避免兩人並排溢出。
+    const STUDENTS_TWO_PER_LINE_THRESHOLD = 10;
+    const groupBlockParagraphs = (slotKey, course, groupName, wideCell) => {
         const details = (course.groupDetails && course.groupDetails[groupName]) || {};
 
         // 教師 (、連接)
@@ -625,8 +627,8 @@ window.generateWordMasterScheduleJS = async function (data) {
                 return s ? `${s.grade} ${s.name}` : '';
             }).filter(Boolean);
 
-            if (twoColStudents) {
-                // 兩人一行 (以全形空格分隔)，貼近附檔寬區塊的雙欄排列
+            if (wideCell && names.length > STUDENTS_TWO_PER_LINE_THRESHOLD) {
+                // 學生超過門檻：兩人一行 (以全形空格分隔) 以省高度
                 for (let i = 0; i < names.length; i += 2) {
                     const pair = names.slice(i, i + 2).join('　　');
                     paras.push(P(pair, { size: 10 }));
@@ -777,19 +779,20 @@ window.generateWordMasterScheduleJS = async function (data) {
         // 每日產生 1~2 個實體欄
         const dayCells = daysReversed.reduce((acc, d) => acc.concat(buildDayCells(`${d.key}-${slot.period}`)), []);
 
-        // 節次/時間欄 (最右)：第 N 節 / 起 / / / 迄
-        const periodParas = [P(toArabicPeriod(slot.name), { size: 11, bold: true })];
+        // 節次/時間欄 (最右)：第 N 節 / 起 / / / 迄 (字級略縮以容納收窄後的欄寬)
+        const periodParas = [P(toArabicPeriod(slot.name), { size: 10, bold: true })];
         if (slot.time) {
             const [start, end] = String(slot.time).split('~');
-            if (start) periodParas.push(P(start.replace(':', '：'), { size: 10 }));
+            if (start) periodParas.push(P(start.replace(':', '：'), { size: 9 }));
             if (end) {
-                periodParas.push(P('/', { size: 10 }));
-                periodParas.push(P(end.replace(':', '：'), { size: 10 }));
+                periodParas.push(P('/', { size: 9 }));
+                periodParas.push(P(end.replace(':', '：'), { size: 9 }));
             }
         }
         const periodCell = new TableCell({
             width: { size: periodWidth, type: WidthType.DXA },
             verticalAlign: VerticalAlign.CENTER,
+            margins: { top: 20, bottom: 20, left: 30, right: 30 },
             children: periodParas
         });
 
