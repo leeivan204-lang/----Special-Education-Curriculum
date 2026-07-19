@@ -73,10 +73,8 @@ socketio = SocketIO(
     # Render 環境優化
     ping_timeout=60,           # 增加 ping 超時
     ping_interval=25,          # 定期 ping 保持連線
-    connect_timeout=30,        # WebSocket 連線超時
     # 傳輸方式：優先 WebSocket，降級到輪詢
-    transports=['websocket', 'polling'],
-    upgrade_package='polling'   # 輪詢作為升級包
+    transports=['websocket', 'polling']
 )
 logger.info(f"Socket.IO configured with transports: websocket, polling")
 
