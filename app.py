@@ -93,7 +93,7 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "connect-src 'self' ws: wss: https://script.google.com https://script.googleusercontent.com https://accounts.google.com; "
-        "frame-src https://accounts.google.com; "
+        "frame-src https://accounts.google.com https://scribehow.com; "
         "img-src 'self' data:; "
     )
     response.headers['Content-Security-Policy'] = csp

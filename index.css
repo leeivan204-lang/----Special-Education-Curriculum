@@ -3666,6 +3666,34 @@ body.viewer-mode .student-grade {
     color: #555;
 }
 
+.guide-embed-note {
+    font-size: 0.88rem;
+    color: #555;
+    margin: 0 0 0.6rem;
+}
+
+.guide-embed {
+    position: relative;
+    width: 100%;
+    max-width: 820px;
+    aspect-ratio: 800 / 679;
+    min-height: 480px;
+    border: 1px solid var(--border-color);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 0.5rem;
+    background: var(--secondary-color);
+}
+
+.guide-embed iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
 .guide-list {
     margin: 0 0 0.5rem;
     padding-left: 1.4rem;
