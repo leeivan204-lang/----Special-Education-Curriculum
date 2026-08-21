@@ -1,8 +1,8 @@
-# 特教課表管理系統 v2026.07.20a
+# 特教課表管理系統 v2026.08.21a
 
 **一個專為特殊教育老師設計的現代化課表管理系統**
 
-[![Version](https://img.shields.io/badge/version-v2026.07.20a-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-v2026.08.21a-blue.svg)](#)
 [![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-53%2F53%20passing-brightgreen.svg)](#)
 
@@ -100,6 +100,10 @@ http://localhost:3000
 
 完整紀錄見 **[CHANGELOG.md](CHANGELOG.md)**。
 
+### v2026.08.21a（2026-08-21）
+- 🎬 使用介紹頁內嵌 Scribe 互動教學（iframe）
+- 🐛 修正總課表「單節微調學生名單」會使多數學生消失（批次學生小數 ID 被 `parseInt` 截斷）
+
 ### v2026.07.20a（2026-07-20）
 - ✨ 新增「使用介紹」頁（完整圖文說明，登入後預設顯示）；側邊欄依操作流程重排
 - 📄 總課表 Word 匯出改為**直向 A4**；欄寬微調（星期欄放寬、節次欄收窄），該分組學生 >10 位時兩人一行
@@ -133,5 +137,5 @@ python -m pytest tests/test_backend_api.py -q   # 10
 
 ---
 
-**特教課表管理系統 v2026.07.20a**　|　最後更新：2026-07-20
+**特教課表管理系統 v2026.08.21a**　|　最後更新：2026-08-21
 官方網址：https://special-education-curriculum.onrender.com

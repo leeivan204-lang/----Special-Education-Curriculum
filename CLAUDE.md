@@ -1,6 +1,6 @@
 # 專案指南 - 特教課表管理系統
 
-> **版本**: 2026.07.20a　|　**文件版本**: 3.0（移除 GAS 自動還原與編輯模式後的實際架構）
+> **版本**: 2026.08.21a　|　**文件版本**: 3.0（移除 GAS 自動還原與編輯模式後的實際架構）
 
 ---
 
@@ -104,7 +104,7 @@ POST /api/data/<user_id>  { data, lastSyncedTimestamp, force }
 
 | 功能 | 行號 | 說明 |
 |------|------|------|
-| 版本字串 `VERSION_NUMBER` | 45 | 目前: `2026.07.20a`（同步更新 index.html 版本與 `?v=` 快取字串） |
+| 版本字串 `VERSION_NUMBER` | 45 | 目前: `2026.08.21a`（同步更新 index.html 版本與 `?v=` 快取字串） |
 | `store` (LocalStorage 封裝) | ~200 | `get/set/getRaw/setRaw`；快取與 `lastSyncedTimestamp` |
 | `loadDataAndSync()` | 876 | 登入後載入 + 時間戳同步（**無 GAS**） |
 | `saveAllDataToServer()` | 962 | POST 儲存，含 409 衝突處理 |
@@ -300,4 +300,4 @@ python -m pytest tests/test_backend_api.py -q   # (10)
 
 ---
 
-**最後更新**: 2026-07-20（v2026.07.20a）
+**最後更新**: 2026-08-21（v2026.08.21a）
