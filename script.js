@@ -2307,11 +2307,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const added = [];
         const skipped = [];
 
-        names.forEach(name => {
+        names.forEach((name, idx) => {
             if (existingNames.has(name)) {
                 skipped.push(name);
             } else {
-                students.push({ id: Date.now() + Math.random(), name, grade });
+                // 使用唯一「整數」ID（避免小數 ID 在其他處被 parseInt 截斷而比對失敗）
+                students.push({ id: Date.now() + idx, name, grade });
                 existingNames.add(name);
                 added.push(name);
             }
@@ -4706,8 +4707,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveStudentOverride(slotKey, courseId, groupName, baseStudents) {
         // Get selected students
+        // 用 parseFloat（非 parseInt）以支援舊資料的小數 ID（批次新增曾用 Date.now()+Math.random()），
+        // 避免截斷小數導致與 baseStudents 比對失敗、把未點擊的學生誤判為「移除」而消失。
         const checkboxes = modalBody.querySelectorAll('input[type="checkbox"]:checked');
-        const selectedStudents = Array.from(checkboxes).map(cb => parseInt(cb.value));
+        const selectedStudents = Array.from(checkboxes).map(cb => parseFloat(cb.value));
 
         // Calculate delta
         const added = selectedStudents.filter(sid => !baseStudents.includes(sid));
